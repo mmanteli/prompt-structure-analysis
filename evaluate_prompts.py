@@ -5,22 +5,26 @@ import datasets
 import jsonargparse
 import json
 import os
-from prompts import prompts_arcchallenge, prompts_tatoeba, prompts_summeval
+from utils.prompts import get_prompts_arcchallenge, get_prompts_tatoeba, get_prompts_summeval, get_prompts_webfaq
 
 
 parser = jsonargparse.ArgumentParser(prog="Quickly evaluate a prompt for retrieval")
 #parser.add_argument('--config', action=ActionConfigFile)
 parser.add_argument('--model_name', '--model', type=str, default=None, required=True,
                     help="HF-alias or path to downloaded model.")
-parser.add_argument('--data_name', '--dataset', type=str, default="mteb/ARCChallenge",  # for now
+parser.add_argument('--data_name', '--dataset', type=str, default="mteb/ARCChallenge",
                     help="HF-alias or path to downloaded dataset.")
+parser.add_argument('--split', type=str, default=None,
+                    help="Which split to select from dataset.")
 parser.add_argument('--template', type=str, default="Instruct-Query", choices=["Instruct-Query", "simple"],
                     help="Which prompting template to use")
+parser.add_argument('--use_lang_specific_prompts', action='store_true',
+                    help="Use prompts that specifically mention the target language")
 parser.add_argument('--k', '--MRR@k', type=int, default=20,
                     help="Which k to use")
-parser.add_argument('--domain', choices = ["A", "QA"], default="A",
-                    help='From which set to search the target from, only target side:A, both:QA')
-parser.add_argument('--save_prefix', type=str, default="results",
+#parser.add_argument('--domain', choices = ["A", "QA"], default="A",
+#                    help='Which set to search the target from, only target side:A, both:QA')  # TODO impelement this
+parser.add_argument('--save_prefix', type=str, default="results_prompts",
                     help="Saving path, model_name and k added in script")
 
 
@@ -48,8 +52,8 @@ def create_binary_relevance_map_arcchallenge(qrels, split="test"):
             qrels_dict[q] = c
     return qrels_dict
 
-def download_arcchallenge():
-    split_to_select = "test"
+def download_arcchallenge_from_hub():
+    split_to_select = "test"   # this is the only choice
     # download all 3 files for retrieval
     corpus = datasets.load_dataset("mteb/ARCChallenge", "corpus")
     qrels = datasets.load_dataset("mteb/ARCChallenge", "qrels")
@@ -60,20 +64,48 @@ def download_arcchallenge():
            queries[split_to_select], \
            create_binary_relevance_map_arcchallenge(qrels, split=split_to_select)
 
-def download_tatoeba(lang):
-    split_to_select = "test"
+def download_arcchallenge(split_to_select="test"):
+    ds = datasets.load_from_disk("/flash/project_462001394/datasets/arcchallenge")
+    corpus = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+                                         "text":ds[split_to_select]["document"]})
+    queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+                                         "text":ds[split_to_select]["query"]})
+    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    del ds
+    return corpus, None, queries, qrels_map
+
+def download_tatoeba_from_hub(lang, split_to_select="test"):
     ds = datasets.load_dataset("mteb/tatoeba-bitext-mining", lang)
-    corpus = datasets.Dataset.from_dict({"_id": range(ds[split_to_select]),
+    corpus = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
                                          "text":ds[split_to_select]["sentence1"]}) # non-english
-    queries = datasets.Dataset.from_dict({"_id": range(ds[split_to_select]),
+    queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
                                          "text":ds[split_to_select]["sentence2"]}) # english
     qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
     del ds
     return corpus, None, queries, qrels_map
 
-def download_summeval():
-    # this is downloaded locally!
-    split_to_select = "test"
+def download_tatoeba(lang, split_to_select="test"):
+    lang_ = "en-" + lang.split("-")[0][:2]
+    ds = datasets.load_from_disk(f"/flash/project_462001394/datasets/tatoeba:{lang_}")
+    corpus = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+                                         "text":ds[split_to_select]["non_english"]}) # non-english
+    queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+                                         "text":ds[split_to_select]["english"]})  # english
+    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    del ds
+    return corpus, None, queries, qrels_map
+
+def download_webfaq(lang, split_to_select="test"):
+    ds = datasets.load_from_disk(f"/flash/project_462001394/datasets/web-faq-bitext:{lang}")
+    corpus = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+                                         "text":ds[split_to_select]["answer2"]}) # 2's contain the target lang
+    queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+                                         "text":ds[split_to_select]["question2"]})
+    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    del ds
+    return corpus, None, queries, qrels_map
+
+def download_summeval(split_to_select = "test"):
     #'text','summary'
     ds = datasets.load_from_disk("/flash/project_462001394/datasets/summeval-2")[split_to_select]
     corpus = datasets.Dataset.from_dict({"_id": range(len(ds)), "text":ds["text"]}) # non-english
@@ -114,8 +146,7 @@ def sanity_check_sorting():
     result3 = []
     sims = b@a.T
     sort = np.argsort(sims, axis=1)[:, ::-1]
-    for line in sort:
-        result3.append(line[0])
+    result3.append([line[0] for line in sort])  # best matches only
     assert (result3 == qrels).all(), f"qrels = {qrels} != {result3} == result3"
 
     # TEST4: if we arrived to the conclusion the same way
@@ -138,38 +169,42 @@ def find_relevant_doc_id(query_id, qrels_dict):
 
 def calculate_scores(options, model, dataset_specific_prompts, corpus, queries, qrels_dict):
     """Calculate MRR@k for a dataset with different prompts."""
+    # check that we are in the right format
+    assert isinstance(queries, datasets.Dataset), f"type(queries) = {type(queries)}, should be datasets.Dataset."
+    assert "text" in queries.column_names and "_id" in queries.column_names
+    print("Sanity check:")
+    print(f"Corpus:\n {corpus['text'][0]}")
+    print(f"Query:\n {apply_template('<Example prompt: '+dataset_specific_prompts[0]+'>', queries['text'][0], template=options.template)}")
     # embed the corpus==targets/answers --> prompt has no effect on these
     corpus_embeddings = model.encode(corpus["text"], normalize_embeddings=True)
-    # see that ids and texts are given correctly
-    assert type(queries) is datasets.Dataset()
-    assert "text" in queries.colums and "_id" in queries.colums
-    # set k to a local variable, as if we introduce queries to search pool, we need to modify it
+
     k = options.k
-    num_examples=len(queries)
+    #num_examples=len(queries)
     results = {}
     for p in dataset_specific_prompts:
         # initialize
         results[p] = []
+
         # encode template(prompt, query)
         prompted_queries = [apply_template(p, q, template=options.template) for q in queries[:]["text"]]
         query_embeddings = model.encode(prompted_queries, normalize_embeddings=True)
+
         # calculate similarity matrix
-        if options.domain == "A":  # only consider the corpus==target side
-            sims = query_embeddings @ corpus_embeddings.T
-        else: # also consider the other queries
-            raise NotImplementedError
-            # TODO something about qrels???
-            #sims = query_embeddings @ torch.cat((corpus_embeddings, query_embeddings)).T
-            #k = options.k + 1 # add one since we introduce a perfect match -> the query itself
+        sims = query_embeddings @ corpus_embeddings.T
         # argsort sims to get best matches
         # here the additional ":" is needed together with axis=1, see sanity_check_sorting()
         sims = np.argsort(sims, axis=1)[:, ::-1]
+
         # then loop over queries and check matches
         for (i, query), sim_line in zip(enumerate(queries), sims):
             # find the id of the correct answer
-            relevant_id = find_relevant_doc_id(query["_id"], qrels_dict)  # this id is str
+            relevant_id = find_relevant_doc_id(query["_id"], qrels_dict)  # this returns id of the correct answer
+            #print("correct answer id:", relevant_id)
             most_similar_docs = sim_line[:k]  # this is an index
-            found_ids = [corpus["_id"] for i in most_similar_docs]   # this is again str
+            #print("similarity:", sim_line.shape)
+            #print("most similar docs:", most_similar_docs)
+            found_ids = [corpus["_id"][i] for i in most_similar_docs]   # this is ids found in search
+            #print("found ids:", found_ids)
             score = 0
             if relevant_id in found_ids:
                 rank_indices = np.where(np.asarray(found_ids) == relevant_id)[0]
@@ -181,40 +216,58 @@ def calculate_scores(options, model, dataset_specific_prompts, corpus, queries, 
             #results[p].append(relevant_id in found_ids)   # this is recall@k
             results[p].append(score)
 
+
+    def stats(t):
+            """Extract summary statistics"""
+            arr = t # .detach().cpu().numpy().reshape(-1)  # this is not a tensor
+            return {"mean": float(np.mean(arr)),
+                    "std": float(np.std(arr)),
+                    "median": float(np.median(arr)),
+                    "q25": float(np.percentile(arr, 25)),
+                    "q75": float(np.percentile(arr, 75)),
+                    "full": str(arr)}
     # average over queries
     records = {}
     for p, values in results.items():
-        #print(p)
-        #print(sum(values)/num_examples)
-        #print("")
-        records[p] = sum(values)/num_examples
+        records[p] = stats(values) #sum(values)/num_examples
 
-    k_ = k if options.domain=="A" else f"{k-1}_full_domain"
-    save_path = f'{options.save_prefix}/{options.model_name.replace("/","__")}/arcchallenge/mrr@{k_}__{options.template}-template.json'
+    model_name_ = options.model_name.replace("/","__")
+    save_path = f'{options.save_prefix}/{model_name_}/{options.data_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/mrr@{k}.json'
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, 'w') as f:
-        json.dump(records,f)
+        json.dump(records,f, indent=2)
 
 
 
 if __name__=="__main__":
     sanity_check_sorting()
     options = parser.parse_args()
-    # download model
-    model = SentenceTransformer(options.model_name)
     # dowload dataset and preprocess
     if options.data_name == "mteb/ARCChallenge":
-        corpus, qrels, queries, qrels_dict = download_arcchallenge()
-        prompts=prompts_arcchallenge
+        corpus, qrels, queries, qrels_dict = download_arcchallenge_from_hub()
+        prompts=get_prompts_arcchallenge()
+    elif options.data_name.lower() == "arcchallenge":
+        corpus, qrels, queries, qrels_dict = download_arcchallenge(split_to_select=options.split)
+        prompts=get_prompts_arcchallenge()
     elif "tatoeba" in options.data_name.lower():
         assert ":" in options.data_name, "Give language to tatoeba separated by column :, e.g. tatoeba:fin-eng"
         tatoeba_, lang = options.data_name.split(":")
-        corpus, qrels, queries, qrels_dict = download_tatoeba(lang)
-        prompts=prompts_tatoeba
+        corpus, qrels, queries, qrels_dict = download_tatoeba(lang, split_to_select=options.split)
+        prompts=get_prompts_tatoeba(lang) if options.use_lang_specific_prompts else get_prompts_tatoeba()
     elif "summeval" in options.data_name.lower():
-        corpus, qrels, queries, qrels_dict = download_summeval()
-        prompts=prompts_summeval
-
+        corpus, qrels, queries, qrels_dict = download_summeval(split_to_select=options.split)
+        prompts=get_prompts_summeval()
+    elif "webfaq" in options.data_name.lower():
+        assert ":" in options.data_name, "Give language to webfaq separated by column :, e.g. webfaq:deu"
+        webfaq_, lang = options.data_name.split(":")
+        corpus, qrels, queries, qrels_dict = download_webfaq(lang, split_to_select=options.split)
+        prompts=get_prompts_webfaq(lang) if options.use_lang_specific_prompts else get_prompts_webfaq()
     # other datasets not implemented yet
     else:
-        raise NotImplementedError("Only ARCChallenge+Tatoeba+Summeval implemented")
+        raise NotImplementedError("Only ARCChallenge+Tatoeba+Summeval+WebFAQ implemented")
+    #print(corpus)
+    #print(qrels_dict)
+    #print(queries)
+    # download model
+    model = SentenceTransformer(options.model_name)
+    calculate_scores(options, model, prompts, corpus, queries, qrels_dict)
