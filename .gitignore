@@ -1,7 +1,7 @@
 results*/
 test*.py
 dev*
-
+logs*
 
 
 # Byte-compiled / optimized / DLL files
