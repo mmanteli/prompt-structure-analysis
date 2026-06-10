@@ -75,19 +75,22 @@ def looper(model_name, data_name, options):
     lang=None
     if ":" in data_name:
         data_name, lang = data_name.split(":")
-        if data_name=="tatoeba":
-            if "-" in lang:   # tatoeba uses different lang scheme
-                lang_to_search_tatoeba = "en-"+lang.split("-")[0][:2]
-            else:
-                raise AttributeError("Give tatoeba lang in fin-eng, deu-eng, etc. format")
     # load data
     if data_name == "tatoeba":
+        if "-" in lang:   # tatoeba uses different lang scheme
+                lang_to_search_tatoeba = "en-"+lang.split("-")[0][:2]
+        else:
+            raise AttributeError("Give tatoeba lang in fin-eng, deu-eng, etc. format")
+        print(f"Reading /flash/project_462000883/datasets/tatoeba:{lang_to_search_tatoeba}")
         data_path = f"/flash/project_462000883/datasets/tatoeba:{lang_to_search_tatoeba}"
     elif data_name == "webfaq":
+        print(f"Reading /flash/project_462000883/datasets/web-faq-bitext:{lang}")
         data_path = f"/flash/project_462000883/datasets/web-faq-bitext:{lang}"
     elif data_name == "arcchallenge":
+        print("Reading /flash/project_462000883/datasets/arcchallenge")
         data_path = "/flash/project_462000883/datasets/arcchallenge"
     elif data_name == "summeval-2":
+        print("Reading /flash/project_462000883/datasets/summeval-2")
         data_path = "/flash/project_462000883/datasets/summeval-2"
     ds = load_dataset(data_path)
     print(f"Dataset loaded:\n{ds}")
@@ -116,16 +119,20 @@ def looper(model_name, data_name, options):
 
     # select prompts to use
     if options.use_lang_specific_prompts:
-        prompts_to_try={"arcchallenge": get_prompts_arcchallenge(),
-                        "tatoeba": get_prompts_tatoeba(lang=lang),
-                        "summeval-2": get_prompts_summeval(),
-                        "webfaq": get_prompts_webfaq(lang=lang)}[data_name]
+        print(f"Trying to resolve lang specific prompts with {data_name} {lang}")
+        if data_name == "tatoeba":
+            prompts_to_try = get_prompts_tatoeba(lang=lang)
+        elif data_name == "webfaq":
+            prompts_to_try = get_prompts_webfaq(lang=lang)
+        else:
+            raise AttributeError(f"{data_name} does not have a lang-specific prompt. Also you should not see this, something's wrong.")
     else:
         prompts_to_try={"arcchallenge": get_prompts_arcchallenge(),
                         "tatoeba": get_prompts_tatoeba(),
                         "summeval-2": get_prompts_summeval(),
                         "webfaq": get_prompts_webfaq()}[data_name]
 
+    print(f"Example: first prompt is {prompts_to_try}")
     # calculate per prompt
     results = {}
     for i, p in enumerate(prompts_to_try):
@@ -216,7 +223,14 @@ if __name__=="__main__":
     options = parser.parse_args()
     # set default values for data and model
     if options.data_name is None:
-        options.data_name = ["arcchallenge",
+        if options.use_lang_specific_prompts:
+            options.data_name = [
+                            "tatoeba:fin-eng",
+                            "tatoeba:fra-eng",
+                            "webfaq:deu",
+                            "webfaq:eng"]
+        else:
+            options.data_name = ["arcchallenge",
                             "summeval-2",
                             "tatoeba:fin-eng",
                             "tatoeba:fra-eng",
