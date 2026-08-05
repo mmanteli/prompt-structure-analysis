@@ -25,6 +25,7 @@ is_lang_specific_data() {
     return 0
 }
 
+k=10
 
 MODELS=(
     "BAAI/bge-m3"
@@ -40,8 +41,10 @@ DATASETS=(
     "summeval-2"
     "tatoeba:fin-eng"
     "tatoeba:fra-eng"
+    "tatoeba:bul-eng"
     "webfaq:deu"
     "webfaq:eng"
+    "webfaq:zho"
 )
 
 for split in fit; do
@@ -54,10 +57,12 @@ for split in fit; do
                 safe_data="${data//:/_}"
 
                 CMD=(python evaluate_prompts.py \
+                    --k=$k \
                     --data_name="$data" \
                     --model_name="$model" \
                     --split="$split" \
-                    --template="$template")
+                    --template="$template"\
+                    --save_prefix="prompt_eval")
 
                 wait_for_space
                 sbatch --job-name="eval_${safe_model}_${safe_data}_${split}_${template}" \
@@ -66,10 +71,12 @@ for split in fit; do
 
                 if is_lang_specific_data "$data"; then
                     CMD=(python evaluate_prompts.py \
+                        --k=$k \
                         --data_name="$data" \
                         --model_name="$model" \
                         --split="$split" \
                         --template="$template" \
+                        --save_prefix="prompt_eval" \
                         --use_lang_specific_prompts)
 
                     wait_for_space
