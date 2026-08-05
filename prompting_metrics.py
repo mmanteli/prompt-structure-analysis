@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import jsonargparse
 import sys
+from scipy.spatial.distance import pdist, squareform
 from utils.prompts import get_prompts_arcchallenge, get_prompts_summeval, get_prompts_tatoeba, get_prompts_webfaq
 # this contains simply lists and dictionaries that help select the correct prompts
 
@@ -34,6 +35,9 @@ def load_dataset(path):
     return datasets.load_dataset(path)
 
 def get_detailed_instruct(prompt, query, template="Instruct-Query"):
+    """Given prompt, query, and template, return a filled template"""
+    if prompt == "NO_PROMPT":
+        return query
     if template == "simple":
         return f"{prompt}. {query}"
     return f'Instruct: {prompt}\nQuery: {query}'
@@ -63,6 +67,67 @@ def unit_test():
         assert np.isclose(i,j, atol=1e-4), f"Test 2 not passed, {i}-{j}"
     print("Success: All tests passed.")
 
+def _as_2d_float(a):
+    a = np.asarray(a, dtype=np.float64)
+    if a.ndim != 2:
+        raise ValueError(f"Expected 2D array, got shape {a.shape}")
+    return a
+
+def pairwise_distances(X, metric="cosine"):
+    """Make a pairwise distance matrix for input X"""
+    X = _as_2d_float(X)
+    return squareform(pdist(X, metric=metric))
+
+def knn_indices_from_distance_matrix(D, k:int):
+    """
+    Return indices of k nearest neighbors for each row i, excluding self.
+    D: NxN pairwise distances.
+    Output: Nxk integer array of indices.
+    """
+    D = np.asarray(D)
+    N = D.shape[0]
+    if D.shape != (N, N):
+        raise ValueError("D must be sqaure")
+    if not (1 <= k <= N - 1):
+        raise ValueError(f"k value must be in [1, {N-1}], got {k}")
+    idx = np.argsort(D, axis=1)
+    # exclude self -> d(self, self) == 0, always the first index
+    idx = idx[:, 1:k+1]
+    return idx
+
+def _jaccard_overlap(a, b):
+    """Jaccard overlap for two 1D integer arrays (as sets)."""
+    sa = set(map(int, a))
+    sb = set(map(int, b))
+    inter = len(sa & sb)
+    union = len(sa | sb)
+    return inter / union if union else 1.0  # return 1 for no sets -> will not happen if k>0
+
+
+def knn_overlap_score(X, Y, k=10, metric="cosine", mode= "jaccard"):
+    """
+    Calculate the average neighborhood preservation score, 0 to 1
+      - "recall": |N_k^X(i) ∩ N_k^Y(i)| / k
+      - "jaccard": Jaccard(N_k^X(i), N_k^Y(i))
+    This function does not return the mean but individual values.
+    """
+    assert mode in ["recall", "jaccard"], f"Mode needs to be recall or jaccard, now {mode}"
+    assert X.shape[0] == Y.shape[0], f"X and Y must have the same number of instances, X.shape={X.shape}, Y.shape={Y.shape}"
+
+    DX = pairwise_distances(X, metric=metric)
+    DY = pairwise_distances(Y, metric=metric)
+
+    NX = knn_indices_from_distance_matrix(DX, k)
+    NY = knn_indices_from_distance_matrix(DY, k)
+
+    if mode == "recall":
+        scores = []
+        for i in range(X.shape[0]):
+            scores.append(len(set(NX[i]) & set(NY[i])) / k)
+        return scores   # MEAN removed here, see stats()
+
+    else:
+        return [_jaccard_overlap(NX[i], NY[i]) for i in range(X.shape[0])]   # MEAN removed here, see stats()
 
 
 def looper(model_name, data_name, options):
@@ -81,17 +146,17 @@ def looper(model_name, data_name, options):
                 lang_to_search_tatoeba = "en-"+lang.split("-")[0][:2]
         else:
             raise AttributeError("Give tatoeba lang in fin-eng, deu-eng, etc. format")
-        print(f"Reading /flash/project_462000883/datasets/tatoeba:{lang_to_search_tatoeba}")
-        data_path = f"/flash/project_462000883/datasets/tatoeba:{lang_to_search_tatoeba}"
+        print(f"Reading /flash/project_462001394/datasets/tatoeba:{lang_to_search_tatoeba}")
+        data_path = f"/flash/project_462001394/datasets/tatoeba:{lang_to_search_tatoeba}"
     elif data_name == "webfaq":
-        print(f"Reading /flash/project_462000883/datasets/web-faq-bitext:{lang}")
-        data_path = f"/flash/project_462000883/datasets/web-faq-bitext:{lang}"
+        print(f"Reading /flash/project_462001394/datasets/web-faq-bitext:{lang}")
+        data_path = f"/flash/project_462001394/datasets/web-faq-bitext:{lang}"
     elif data_name == "arcchallenge":
-        print("Reading /flash/project_462000883/datasets/arcchallenge")
-        data_path = "/flash/project_462000883/datasets/arcchallenge"
+        print("Reading /flash/project_462001394/datasets/arcchallenge")
+        data_path = "/flash/project_462001394/datasets/arcchallenge"
     elif data_name == "summeval-2":
-        print("Reading /flash/project_462000883/datasets/summeval-2")
-        data_path = "/flash/project_462000883/datasets/summeval-2"
+        print("Reading /flash/project_462001394/datasets/summeval-2")
+        data_path = "/flash/project_462001394/datasets/summeval-2"
     ds = load_dataset(data_path)
     print(f"Dataset loaded:\n{ds}")
     # which columns to read
@@ -125,23 +190,34 @@ def looper(model_name, data_name, options):
         elif data_name == "webfaq":
             prompts_to_try = get_prompts_webfaq(lang=lang)
         else:
-            raise AttributeError(f"{data_name} does not have a lang-specific prompt. Also you should not see this, something's wrong.")
+            raise AttributeError(f"{data_name} does not have a lang-specific prompt option.")
     else:
         prompts_to_try={"arcchallenge": get_prompts_arcchallenge(),
                         "tatoeba": get_prompts_tatoeba(),
                         "summeval-2": get_prompts_summeval(),
                         "webfaq": get_prompts_webfaq()}[data_name]
 
-    print(f"Example: first prompt is {prompts_to_try}")
-    # calculate per prompt
+    # calculate metrics per prompt
     results = {}
-    for i, p in enumerate(prompts_to_try):
+
+    # Manually add two prompt options:
+    # for "complex" prompts, add NO_PROMPT = calculates vanilla knn, and
+    # and "" = empty, just includes the word "Instruct" to see its effect
+    # ""-option will be saved as "empty"
+    if options.template != "simple":
+        prompts_to_try = ["NO_PROMPT", ""] + prompts_to_try
+    else:
+        prompts_to_try = ["NO_PROMPT"] + prompts_to_try
+    
+
+    for i, p in enumerate():   # NO_PROMPT directs to query only
         # apply template and embed
         prompts_and_queries = [get_detailed_instruct(p, q, template=options.template) for q in queries]
         #print(f"Example of prompt+query to be encoded:\n{prompts_and_queries[0]}")
+        print(f"Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")
         embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True)
         #embeddings_p = model.encode([p for _ in prompts_and_queries],convert_to_tensor=True, normalize_embeddings=True)
-        # ^^ TODO add comparison to query side later?
+        # ^^ TODO add comparison to other datasets and query side later?
 
         # Chord vector from query to prompted query
         delta_pq = embeddings_pq - embeddings_q  # (N, D)
@@ -180,9 +256,15 @@ def looper(model_name, data_name, options):
         #assert torch.allclose(parallel_fraction, chord_sim, atol=1e-4), \
         #    f"Parallel fraction and chord sim do not match: {parallel_fraction} != {chord_sim}"
 
+        # ---- Metric 5: knn retention ----
+        knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu())
+
         def stats(t):
             """Extract summary statistics"""
-            arr = t.detach().cpu().numpy().reshape(-1)
+            if isinstance(t, torch.Tensor):
+                arr = t.detach().cpu().numpy().reshape(-1)
+            else:
+                arr = t
             return {"mean": float(np.mean(arr)),
                     "std": float(np.std(arr)),
                     "median": float(np.median(arr)),
@@ -190,7 +272,8 @@ def looper(model_name, data_name, options):
                     "q75": float(np.percentile(arr, 75))}
 
         results[f"prompt{i}"] = {
-            "prompt_text": p,
+            "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
+            "example_text": prompts_and_queries[0],             # example text as a sanity check
             "chord_similarity":     stats(chord_sim),           # angulation (same as par. fraction)
             "sim_q_a":              stats(sim_qa),              # baseline similarity
             "sim_pq_a":             stats(sim_pqa),             # prompted similarity
@@ -199,6 +282,7 @@ def looper(model_name, data_name, options):
             "parallel_magnitude":   stats(parallel_magnitude),  # movement toward answer (signed)
             "orthogonal_magnitude": stats(orthogonal_magnitude),# movement sideways
             "parallel_fraction":    stats(parallel_fraction),   # fraction toward answer
+            "knn_retention":        stats(knn_retention),       # how much structure we gain
         }
 
     model_name_safe = model_name.replace("/", "__")
