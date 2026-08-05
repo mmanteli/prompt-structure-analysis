@@ -27,26 +27,32 @@ is_lang_specific_data() {
 
 # ── First: structural analysis ──────────────────────────────────────
 
-for split in fit test; do
-    for template in "Instruct-Query" "simple"; do
-        CMD=(python prompting_metrics.py \
-            --split="$split" \
-            --template="$template")
+for dataset in "arcchallenge" "summeval-2" "webfaq:deu" "webfaq:eng" "webfaq:zho"; do  #"tatoeba:fin-eng" "tatoeba:fra-eng" 
+    for split in fit; do
+        for template in "Instruct-Query" "simple"; do
+            CMD=(python prompting_metrics.py \
+                --data_name=$dataset \
+                --split="$split" \
+                --template="$template" \
+                --save_prefix="prompt_metrics")
 
-        wait_for_space
-        sbatch --job-name="prompt_metrics_${split}_${template}" \
-               -t 02:59:59 \
-               slurm_run_command_gpu.sh "${CMD[@]}"
+            wait_for_space
+            echo "${dataset}:${split}_${template}"
+            sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}" -t 00:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            
+            if is_lang_specific_data $dataset; then
+                CMD=(python prompting_metrics.py \
+                    --split="$split" \
+                    --data_name=$dataset \
+                    --template="$template" \
+                    --save_prefix="prompt_metrics" \
+                    --use_lang_specific_prompts)
 
-        CMD=(python prompting_metrics.py \
-            --split="$split" \
-            --template="$template" \
-            --use_lang_specific_prompts)
-
-        wait_for_space
-        sbatch --job-name="prompt_metrics_${split}_${template}_lang_specific" \
-               -t 02:59:59 \
-               slurm_run_command_gpu.sh "${CMD[@]}"
+                wait_for_space
+                echo "${dataset}:${split}_${template}_lang_specific"
+                sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}_lang_specific" -t 00:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            fi
+        done
     done
 done
 
