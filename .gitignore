@@ -2,7 +2,7 @@ results*/
 test*.py
 dev*
 logs*
-
+old*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
