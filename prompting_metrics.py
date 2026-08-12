@@ -7,7 +7,7 @@ import torch
 import jsonargparse
 import sys
 from scipy.spatial.distance import pdist, squareform
-from utils.prompts import get_prompts_arcchallenge, get_prompts_summeval, get_prompts_tatoeba, get_prompts_webfaq
+from utils.prompts import get_prompts_arcchallenge, get_prompts_summeval, get_prompts_tatoeba, get_prompts_webfaq, get_detailed_instruct
 # this contains simply lists and dictionaries that help select the correct prompts
 
 cos = torch.nn.CosineSimilarity()
@@ -27,20 +27,14 @@ parser.add_argument('--use_lang_specific_prompts', action='store_true',
                     help="Use prompts that specifically mention the target language, only for multilingual datasets.")
 parser.add_argument('--save_prefix', type=str, default="results_metrics",
                     help="Saving path, model_name and k added in script")
+parser.add_argument('--batch_size', type=int, default=16,
+                    help="model.encode() batch size")
 
 
 def load_dataset(path):
     if os.path.exists(path):
         return datasets.load_from_disk(path)
     return datasets.load_dataset(path)
-
-def get_detailed_instruct(prompt, query, template="Instruct-Query"):
-    """Given prompt, query, and template, return a filled template"""
-    if prompt == "NO_PROMPT":
-        return query
-    if template == "simple":
-        return f"{prompt}. {query}"
-    return f'Instruct: {prompt}\nQuery: {query}'
 
 
 def unit_test():
@@ -173,8 +167,8 @@ def looper(model_name, data_name, options):
     model = SentenceTransformer(model_name, trust_remote_code=True)
     print("Model loaded.")
     # embed the "ground truth values": regular queries and targets
-    embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True)
-    embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True)
+    embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=options.batch_size)
+    embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=options.batch_size)
 
     # Chord vector from query to answer
     delta_a = embeddings_a - embeddings_q  # (N, D)
@@ -182,7 +176,21 @@ def looper(model_name, data_name, options):
     # Baseline: how similar are q and a without any prompt?
     sim_qa = cos(embeddings_q, embeddings_a)  # (N,)
 
+    # Negatives for Metrics 6 & 7
+    N = embeddings_q.shape[0]
+    k_hard = min(10, N - 1)
+    # Full query-to-answer similarity matrix (embeddings are L2-normed)
+    sim_q_all = torch.mm(embeddings_q, embeddings_a.T) # (N, N)
+    # For each query, find indices of k nearest *wrong* answers
+    hard_neg_indices = []
+    for i in range(N):
+        sims_i = sim_q_all[i].clone()
+        # mask out the correct pair
+        sims_i[i] = -float('inf')
+        hard_neg_indices.append(torch.topk(sims_i, k_hard).indices)
+
     # select prompts to use
+    # language specific: prompt uses language, e.g. "Translate the sentence to French"
     if options.use_lang_specific_prompts:
         print(f"Trying to resolve lang specific prompts with {data_name} {lang}")
         if data_name == "tatoeba":
@@ -192,32 +200,30 @@ def looper(model_name, data_name, options):
         else:
             raise AttributeError(f"{data_name} does not have a lang-specific prompt option.")
     else:
+        # language-independent options
         prompts_to_try={"arcchallenge": get_prompts_arcchallenge(),
                         "tatoeba": get_prompts_tatoeba(),
                         "summeval-2": get_prompts_summeval(),
                         "webfaq": get_prompts_webfaq()}[data_name]
 
-    # calculate metrics per prompt
-    results = {}
-
-    # Manually add two prompt options:
-    # for "complex" prompts, add NO_PROMPT = calculates vanilla knn, and
-    # and "" = empty, just includes the word "Instruct" to see its effect
-    # ""-option will be saved as "empty"
+    # Manually add two prompt options for baseline:
+    # for non-simple prompts, add 
+    #   NO_PROMPT => returns only q (for knn calc, redundant to embed but easier to modify later), saved as "NO_PROMPT"
+    #   "" => empty, baseline which only includes the word "Instruct" to see its effect, saved as "empty"
+    # for simple template, only the NO_PROMPT option (no word instruct in simple template)
     if options.template != "simple":
         prompts_to_try = ["NO_PROMPT", ""] + prompts_to_try
     else:
         prompts_to_try = ["NO_PROMPT"] + prompts_to_try
     
-
-    for i, p in enumerate():   # NO_PROMPT directs to query only
+    # calculate metrics per prompt
+    results = {}
+    for i, p in enumerate(prompts_to_try):
         # apply template and embed
         prompts_and_queries = [get_detailed_instruct(p, q, template=options.template) for q in queries]
-        #print(f"Example of prompt+query to be encoded:\n{prompts_and_queries[0]}")
-        print(f"Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")
-        embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True)
-        #embeddings_p = model.encode([p for _ in prompts_and_queries],convert_to_tensor=True, normalize_embeddings=True)
-        # ^^ TODO add comparison to other datasets and query side later?
+        # sanity check printout: see that template is filled correctly
+        print(f"Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")  
+        embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=options.batch_size)
 
         # Chord vector from query to prompted query
         delta_pq = embeddings_pq - embeddings_q  # (N, D)
@@ -232,7 +238,8 @@ def looper(model_name, data_name, options):
         sim_pqa = cos(embeddings_pq, embeddings_a)  # (N,)
         sim_improvement = sim_pqa - sim_qa           # (N,)
 
-        # ---- Metric 3: How far did the prompt move the query? ----
+        # ---- Metric 3: Direct distance ----
+        # "How far did the prompt move the query?"
         displacement = torch.norm(delta_pq, dim=1)  # (N,)
 
         # ---- Metric 4: Parallel vs orthogonal decomposition ----
@@ -248,16 +255,41 @@ def looper(model_name, data_name, options):
 
         # Ratio: what fraction of the movement is toward the answer?
         parallel_fraction = parallel_magnitude / (displacement + 1e-10)  # (N,), in [-1, 1]
-        #parallel_fraction = parallel_magnitude / displacement if displacement > 0 else 0.0
 
-        # sanity check: these should equal (simply from pythagorean theorem)
-        # if not: check values of deltas and displacement, one of these might be 0.0
-        # removed this because the +1e-10 thing has an impact: saving both and checking later!
+        # sanity check: parallel_fraction and chord_sim should equal (simply from pythagorean theorem)
         #assert torch.allclose(parallel_fraction, chord_sim, atol=1e-4), \
         #    f"Parallel fraction and chord sim do not match: {parallel_fraction} != {chord_sim}"
+        # assert removed since result analysis will handle it
 
         # ---- Metric 5: knn retention ----
+        # "Does adding prompt make the query side structure resemble the answer side"
         knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu())
+
+        # ---- Metric 6: displacement vs. wrong answers ----
+        # "Does adding prompt take you away from incorrect answers?"
+        # For the k-hardest wrong answers (most similar to the unprompted query),
+        # measure how much their similarity changes after prompting.
+        # Negative = prompt moved query away from hard negatives (desirable).
+        sim_pq_all = torch.mm(embeddings_pq, embeddings_a.T)        # (N, N)
+        hard_neg_sim_change = torch.tensor([
+            (sim_pq_all[i, hard_neg_indices[i]]
+            - sim_q_all[i, hard_neg_indices[i]]).mean().item()
+            for i in range(N)
+        ])  # (N,)
+
+
+        # ---- Metric 7: angle between delta_pq and delta_(closest k wrong targets) ----
+        # For each query's k-nearest wrong answers, compute the chord vector
+        # from the query to that wrong answer, then measure cosine with delta_pq.
+        # Positive = prompt pushes toward hard negatives (undesirable).
+        # Negative = prompt pushes away from hard negatives (desirable).
+        hard_neg_angulation = torch.tensor([
+            cos(
+                delta_pq[i].unsqueeze(0).expand(k_hard, -1),
+                embeddings_a[hard_neg_indices[i]] - embeddings_q[i]
+            ).mean().item()
+            for i in range(N)
+        ])  # (N,)
 
         def stats(t):
             """Extract summary statistics"""
@@ -283,6 +315,8 @@ def looper(model_name, data_name, options):
             "orthogonal_magnitude": stats(orthogonal_magnitude),# movement sideways
             "parallel_fraction":    stats(parallel_fraction),   # fraction toward answer
             "knn_retention":        stats(knn_retention),       # how much structure we gain
+            "hard_neg_sim_change":  stats(hard_neg_sim_change), # sim change to hard negatives
+            "hard_neg_angulation":  stats(hard_neg_angulation), # angle toward hard negatives
         }
 
     model_name_safe = model_name.replace("/", "__")
