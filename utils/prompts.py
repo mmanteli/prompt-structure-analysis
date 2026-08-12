@@ -253,3 +253,15 @@ def get_prompts_webfaq(lang=None):
         "hgJKSbf oiawnef LKJHDS kdjfbs",
         "!!!! ??? ### @@@",
     ]
+
+
+
+def get_detailed_instruct(prompt, query, template="Instruct-Query"):
+    """Given prompt, query, and template, return a filled template"""
+    if prompt == "NO_PROMPT":
+        return query
+    if template == "simple":
+        return f"{prompt if prompt != 'EMPTY' else ''}. {query}"
+    if template == "Instruct-Query":
+        return f"Instruct: {prompt if prompt != 'EMPTY' else ''}\nQuery: {query}"
+    raise NotImplementedError(f"{template=} not implemented")
