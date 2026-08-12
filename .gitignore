@@ -3,6 +3,8 @@ test*.py
 dev*
 logs*
 old*
+prompt_eval*
+prompt_metrics*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
