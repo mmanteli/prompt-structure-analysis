@@ -62,6 +62,7 @@ for split in fit; do
                     --model_name="$model" \
                     --split="$split" \
                     --template="$template"\
+                    --batch_size=8 \
                     --save_prefix="prompt_eval")
 
                 wait_for_space
@@ -77,6 +78,7 @@ for split in fit; do
                         --split="$split" \
                         --template="$template" \
                         --save_prefix="prompt_eval" \
+                        --batch_size=8 \
                         --use_lang_specific_prompts)
 
                     wait_for_space
