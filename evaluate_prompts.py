@@ -61,9 +61,18 @@ def yield_from_pkl(path):
             except EOFError:
                 break
 
-def write_embeddings(file, key, text_ids, texts, embeddings):
-    d = {"key": key, "ids": text_ids, "texts": texts, "embeddings": embeddings}
-    append_pkl(d, file)
+def write_embeddings(file, key, data, embeddings):
+    if isinstance(data, datasets.Dataset):
+        if embeddings is None:
+            d = {data.to_dict()}
+        else:
+            d = {**data.to_dict(), **{"embeddings":embeddings}}
+    else:
+        if embeddings is None:
+            d = data
+        else:
+            d = {**data, **{"embeddings":embeddings}}
+    append_pkl({"key":key, "data": d}, file)
 
 def sanity_check_sorting():
     report("Sanity checking matrix operations")
@@ -109,44 +118,93 @@ def sanity_check_sorting():
 def apply_template(prompt, query, template="Instruct-Query"):
     return get_detailed_instruct(prompt, query, template=template)
 
+def calculate_non_rank_metrics(found_ids, relevant_ids):
+    """
+    Calculate non-rank related metrics. 
+    Both lists assumed to be sorted, found_ids by similarity and relevant_ids by relevance.
+    """
+    tp = sum(1 for fid in found_ids if fid in relevant_ids)
+    # recall is normal
+    recall = tp / len(relevant_ids)
+    # precision is artificially deflated: if there are 2 relevant docs
+    # but we set k=10 for 10 found ids
+    # even if we found the two relevant at the top
+    # precision will be low
+    # hence, also r-precision, which is basically recall again in most cases
+    precision = tp / len(found_ids)
+    tp_ = sum(1 for fid in found_ids[:len(relevant_ids)] if fid in relevant_ids)
+    rprecision = tp_ / len(relevant_ids)
+    # for F1, we are interested in the top1 match 
+    # this is for bitext mining, a task with one to one binary qrels
+    # this is why we're not using this common formula
+    #f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    # but this, which is basically just accuracy
+    # we will still call it F1 because that what MTEB calls it, even if it reduces to acc
+    f1_at_1 = 1 if found_ids[0] == relevant_ids[0] else 0
+    return f1_at_1, recall, precision, rprecision
 
-def sanity_check_logic(k=1):
-    """Check the logic of recall@k/MRR@k calculation"""
-    # construct examples
-    corpus = datasets.Dataset.from_dict({"_id":["c1","c2","c3","c4"], "text":["a","b","c","d"]})
-    queries = datasets.Dataset.from_dict({"_id": ["q1", "q2"], "text":["correct is a", "correct is c"]})
-    qrels_dict = {"q1":"c1", "q2":"c3"}
+def sanity_check_logic(k=2):
+    """Check the logic of metric calculation"""
+    # construct examples for the sanity check
+    corpus = datasets.Dataset.from_dict({"_id":["c14","c21","c33","c41"], "text":["a","b","c","d"]})
+    queries = datasets.Dataset.from_dict({"_id": ["q1", "q2", "q4"], "text":["correct is mostly a, but d is okay", "correct is c", "correct is a+b+c"]})
+    qrels = datasets.Dataset.from_dict({"query_id":["q1", "q1", "q2", "q4", "q4", "q4"], "corpus_id":["c14", "c41", "c33", "c14","c21","c33"], "score": [1, 0.9, 1, 1,0.99,0.9]})
     # similarities: normally, this would be emb(queries)@emb(corpus).T
-    # Perfect match for q1 (a is highest) and second best for q2 (b is highest, followed by c)
-    sims = np.array([[0.8, -0.3, 0.3, 0.2], [-0.2, 0.92, 0.9, 0.1]])
+    # Perfect match for q1 (a is highest, d second highes) and second best for q2 (b is highest, followed by c, which is correct)
+    # for the last on, the correct ones are correct but the last to are in wrong order
+    sims = np.array([[0.8, -0.3, 0.3, 0.6], [-0.2, 0.92, 0.90, 0.1], [0.9, 0.6, 0.7, -0.2]])
     # argsort to get most similar indices
     sims = np.argsort(sims, axis=1)[:, ::-1]
-    recalls=[]
-    mrrs=[]
+    recall_at_k = []
+    mrr_at_k = []
+    ndcg_at_k = []
+    f1_at_1 = []
+    precision_at_k = []
+    rprecision_at_k = []
     for (i, query), sim_line in zip(enumerate(queries), sims):
-        relevant_id = find_relevant_doc_id(query["_id"], qrels_dict)
+        print("In Q:", query["_id"],", text=", query["text"])
+        relevant_ids, associated_scores = find_relevant_doc_id(query["_id"], qrels)
         most_similar_docs = sim_line[:k]
         found_ids = [corpus["_id"][j] for j in most_similar_docs]
-        if relevant_id in found_ids:
-            rank_indices = np.where(np.asarray(found_ids) == relevant_id)[0]
-            print(rank_indices)
-            print("Correct found")
-            print("\tQ:", query["text"])
-            # problem: this does not produce them "best match first" but in the order of the dataset
-            print("\tfound: (best match first)", [corpus[int(j)]["text"] for j in most_similar_docs])
-            recalls.append(1.0)
-            mrrs.append(1.0/(rank_indices[0]+1))
-        else:
-            print("Did not find correct")
-            print("\tQ:", query["text"])
-            print("\tfound: (best match first)", [corpus[int(j)]["text"] for j in most_similar_docs])
-            recalls.append(0.0)
-            mrrs.append(0.0)
-    results = (np.mean(recalls), np.mean(mrrs))
-    print(results)
+        print(f"{relevant_ids=}, {associated_scores=}")
+        ideal_cumulative_gain = np.sum([(2**s-1)/np.log2(rank+1+1.) for rank, s in enumerate(np.sort(associated_scores)[::-1][:k])])   # UP TO k
+        # if everything was perfect: highest score at rank1, second at rank2
+        # also +1+1 since the rank is zero indexed here -> one +1 to fix rank and other is in the formula
+        discounted_cumulative_gain = 0
+        mrr_ = 0
+        # we can already calculate some results with no rank information
+        #rec_ = sum(1 for fid in found_ids if fid in relevant_ids) / len(relevant_ids)
+        f1_, rec_, prec_, rprec_= calculate_non_rank_metrics(found_ids, relevant_ids)
+        for rank_, found_id in enumerate(found_ids):
+            rank = rank_+ 1 # fix zero indexing
+            print(f"{found_id} found in rank {rank}")
+            if found_id in relevant_ids:
+                mrr_ = 1/(rank) if mrr_==0 else mrr_  # again, only first match counts, so only set at highest rank
+                found_score = associated_scores[relevant_ids.index(found_id)]
+                discounted_cumulative_gain += (2**found_score-1)/np.log2(rank+1)
+        current_ndcg_at_k = 1 if ideal_cumulative_gain == 0 else discounted_cumulative_gain/ideal_cumulative_gain # 1 for "nothing relevant was to be discovered"
+        ndcg_at_k.append(current_ndcg_at_k)
+        mrr_at_k.append(mrr_)
+        recall_at_k.append(rec_)
+        f1_at_1.append(f1_)
+        precision_at_k.append(prec_)
+        rprecision_at_k.append(rprec_)
+    print("Final results")
+    print("RECALL", np.mean(recall_at_k))
+    print("MRR", np.mean(mrr_at_k))
+    print("NDCG", np.mean(ndcg_at_k))
+    print("F1", np.mean(f1_at_1))
+    print("R-PRECISION", np.mean(rprecision_at_k))
 
-def find_relevant_doc_id(query_id, qrels_dict):
-    return qrels_dict[query_id] if query_id in qrels_dict else qrels_dict[f"ARC-Challenge-q-{query_id}"]
+def find_relevant_doc_id(query_id, qrels):
+    if isinstance(qrels, dict):
+        return ([qrels[query_id]], [1]) if query_id in qrels else ([], [])
+    indices_of_query_ids = np.where(np.array(qrels["query_id"]) == query_id)[0]
+    associated_corpus_values = np.array(qrels["corpus_id"])[indices_of_query_ids]
+    associated_corpus_scores = np.array(qrels["score"])[indices_of_query_ids]
+    # sort these to have the best match at the top
+    indices_that_sort = np.argsort(associated_corpus_scores)[::-1]
+    return (associated_corpus_values[indices_that_sort].tolist(), associated_corpus_scores[indices_that_sort].tolist())
 
 def stats(t):
     """Extract summary statistics"""
@@ -156,52 +214,73 @@ def stats(t):
             "median": float(np.median(arr)),
             "q25": float(np.percentile(arr, 25)),
             "q75": float(np.percentile(arr, 75)),
-            "full": str(arr)}
+            #"full": str(arr)
+            }
 
-
-def calculate_scores(k, corpus, queries, qrels_dict, corpus_embeddings, query_embeddings):
+def calculate_scores(k, corpus, queries, qrels, corpus_embeddings, query_embeddings):
     """
     Calculate MRR@k and recall@k for given queries and corpus
-    corpus=dataset of targets (ids and texts)
-    queries=dataset of queries (ids and texts)
-    qrels=dict of corpus_ids to query_ids
-    corpus_embeddings = matrix of corpus embeddings
-    query_embeddings = matrix of query embeddings (and possibly, a prompt has been added before calculation)
+    corpus=dataset of targets (columns _id and text)
+    queries=dataset of queries (columns _id and text)
+    qrels=either a dataset of (query_id, corpus_id, score) or binary dict(query_id:corpus_id)
+    corpus_embeddings = matrix of corpus embeddings (in the same order as corpus)
+    query_embeddings = matrix of query embeddings (again, same order and possibly, a prompt has been added before calculation)
     """
     # calculate similarity matrix
     sims = query_embeddings @ corpus_embeddings.T
     # argsort sims to get best matches
     # here the additional ":" is needed together with axis=1, see sanity_check_sorting()
     sims = np.argsort(sims, axis=1)[:, ::-1]
-
-    mrrscores=[]
-    recallscores=[]
-    # then loop over queries and check matches
+    # initialize data collection
+    recall_at_k = []
+    mrr_at_k = []
+    ndcg_at_k = []
+    f1_at_1 = []  # this is the metric for bitext mining (binary task, hence "at_1")
+    precision_at_k = []
+    rprecision_at_k = []
     for (i, query), sim_line in zip(enumerate(queries), sims):
-        # find the id of the correct answer
-        relevant_id = find_relevant_doc_id(query["_id"], qrels_dict)  # this returns id of the correct answer
-        #print("correct answer id:", relevant_id)
+        # first, find the relevant ids (this works for both types of qrels)
+        relevant_ids, associated_scores = find_relevant_doc_id(query["_id"], qrels)
+        # from these, calculate the ideal_cumulative_gain (used to normalize discounted cumulative gain)
+        ideal_cumulative_gain = np.sum([(2**s-1)/np.log2(rank+1+1.) for rank, s in enumerate(np.sort(associated_scores)[::-1][:k])])   # UP TO k
+        # if everything was perfect: highest score at rank1, second at rank2
+        # also +1+1 since the rank is zero indexed here -> one +1 to fix rank and other is in the formula
+        # Next, find best k matches
         most_similar_docs = sim_line[:k]
-        #print("similarity:", sim_line.shape)
-        #print("most similar docs:", most_similar_docs)
-        found_ids = [corpus["_id"][j] for j in most_similar_docs]   # this is ids found in search
-        #print("found ids:", found_ids)d
-        mrr = 0
-        recall = 0
-        if relevant_id in found_ids:
-            rank_indices = np.where(np.asarray(found_ids) == relevant_id)[0]
-            assert len(rank_indices) == 1, f"Duplicate corpus ID in top-k for query {i}, should NOT HAPPEN"
-            # rank is 1-indexed: position 0 -> rank 1
-            rank = rank_indices[0] + 1
-            mrr = 1.0 / rank
-            recall = 1  # relevant_id is in found_ids
-        mrrscores.append(mrr)
-        recallscores.append(recall)
+        found_ids = [corpus["_id"][j] for j in most_similar_docs]
+        
+        # we can already calculate some results with no rank information
+        #rec_ = sum(1 for fid in found_ids if fid in relevant_ids) / len(relevant_ids)
+        f1_, rec_, prec_, rprec_= calculate_non_rank_metrics(found_ids, relevant_ids)
+        # initialize the rank dependent metrics
+        discounted_cumulative_gain = 0
+        mrr_ = 0
+        for rank_, found_id in enumerate(found_ids):
+            rank = rank_+ 1 # fix zero indexing
+            if found_id in relevant_ids:
+                mrr_ = 1/(rank) if mrr_==0 else mrr_  # again, only first match counts, so only set at highest rank
+                found_score = associated_scores[relevant_ids.index(found_id)]
+                discounted_cumulative_gain += (2**found_score-1)/np.log2(rank+1)
+        # calculate ndcg@k for this query
+        current_ndcg_at_k = 0 if ideal_cumulative_gain == 0 else discounted_cumulative_gain/ideal_cumulative_gain # 0 if nothing was to be discovered
+        # collect results
+        ndcg_at_k.append(current_ndcg_at_k)
+        mrr_at_k.append(mrr_)
+        recall_at_k.append(rec_)
+        f1_at_1.append(f1_)
+        precision_at_k.append(prec_)
+        rprecision_at_k.append(rprec_)
 
-    return {f"mrr@{k}": stats(mrrscores), f"recall@{k}": stats(recallscores)}
+    return {f"mrr@{k}": stats(mrr_at_k),
+            f"recall@{k}": stats(recall_at_k),
+            f"ndcg@{k}": stats(ndcg_at_k),
+            "F1": stats(f1_at_1),
+            f"precision@{k}": stats(precision_at_k),
+            f"rprecision@{k}": stats(rprecision_at_k),
+            }
 
 
-def embed_and_calculate_scores(options, dataset_specific_prompts, corpus, queries, qrels_dict):
+def embed_and_calculate_scores(options, dataset_specific_prompts, corpus, queries, qrels):
     """Embed corpus, queries (+prompts) and calculate evaluation scores."""
     # check that we are in the right format
     assert isinstance(queries, datasets.Dataset), f"type(queries) = {type(queries)}, should be datasets.Dataset."
@@ -213,8 +292,8 @@ def embed_and_calculate_scores(options, dataset_specific_prompts, corpus, querie
     corpus_embeddings = model.encode(corpus["text"], normalize_embeddings=True, batch_size=options.batch_size)
     if options.embeddings:
         os.makedirs(os.path.dirname(options.embeddings), exist_ok=True)
-        write_embeddings(file=options.embeddings, key="qrels", text_ids=qrels_dict,texts=[], embeddings=[])
-        write_embeddings(file=options.embeddings, key="corpus", text_ids=corpus["_id"],texts=corpus["text"], embeddings=corpus_embeddings)
+        write_embeddings(file=options.embeddings, key="qrels", data=qrels, embeddings=None)
+        write_embeddings(file=options.embeddings, key="corpus", data=corpus, embeddings=corpus_embeddings)
 
     # loop over prompts
     results = {}
@@ -223,16 +302,20 @@ def embed_and_calculate_scores(options, dataset_specific_prompts, corpus, querie
         prompted_queries = [apply_template(p, q, template=options.template) for q in queries[:]["text"]]
         query_embeddings = model.encode(prompted_queries, normalize_embeddings=True, batch_size=options.batch_size)
         if options.embeddings:
-            write_embeddings(file=options.embeddings, key=p, text_ids=queries["_id"], texts=prompted_queries, embeddings=query_embeddings)
+            # construct a new dict here
+            write_embeddings(file=options.embeddings, 
+                             key=p, 
+                             data={"_id": queries["_id"], "text": prompted_queries}, 
+                             embeddings=query_embeddings)
         report(f"----\nNow in prompt {i}, example: \n{prompted_queries[0]}")
-        results[f"prompt{i}"] = {**{"prompt_text": p}, **calculate_scores(options.k, corpus, queries, qrels_dict, corpus_embeddings, query_embeddings)}
+        results[f"prompt{i}"] = {**{"prompt_text": p}, **calculate_scores(options.k, corpus, queries, qrels, corpus_embeddings, query_embeddings)}
 
     os.makedirs(os.path.dirname(options.save_path), exist_ok=True)
     with open(options.save_path, 'w') as f:
         json.dump(results,f, indent=2)
 
 
-def read_embeddings_and_calculate_scores(options, dataset_specific_prompts, corpus, queries, qrels_dict):
+def read_embeddings_and_calculate_scores(options, dataset_specific_prompts, corpus, queries, qrels):
     corpus_embeddings = None
     results = {}
     i = 0 # index for prompts
@@ -241,21 +324,26 @@ def read_embeddings_and_calculate_scores(options, dataset_specific_prompts, corp
         # check that they match, and set corpus_embeddings
         if data["key"] == "qrels":
             # qrels is saved in "text_ids"
-            assert qrels_dict == data["ids"], "Mismatch between loaded qrels and precalculated embeddings"
+            if isinstance(qrels, dict):
+                print(data["data"])
+                assert data["data"] == qrels, "Mismatch between qrels and precalculated embeddings"
+            else:
+                assert data["data"] == qrels.to_dict(), "Mismatch between qrels and precalculated embeddings"
             continue
         if data["key"] == "corpus":
-            assert corpus["_id"] == data["ids"], "Mismatch between loaded corpus and precalculated embeddings"
-            assert corpus["text"] == data["texts"], "Mismatch between loaded corpus and precalculated embeddings"
+            assert data["data"]["_id"] == corpus["_id"], "Mismatch between loaded corpus and precalculated embeddings"
+            assert data["data"]["text"] == corpus["text"], "Mismatch between loaded corpus and precalculated embeddings"
             # set corpus embeddings
-            corpus_embeddings = data["embeddings"]
+            corpus_embeddings = data["data"]["embeddings"]
             continue
         # after reading, we can calculate:
         prompt = data["key"]  # saved here
         report(f"In prompt {prompt}")
-        query_embeddings = data["embeddings"]
-        # check that prompt order is the same
-        assert get_detailed_instruct(prompt, queries[0]["text"], template=options.template) == data["texts"][0], f"{get_detailed_instruct(prompt, queries[0], template=options.template)} == {data['texts'][0]}"
-        results[f"prompt{i}"] = {**{"prompt_text": prompt}, **calculate_scores(options.k, corpus, queries, qrels_dict, corpus_embeddings, query_embeddings)}
+        query_embeddings = data["data"]["embeddings"]
+        # check that prompt order is the same --> we can save with the same prompt order
+        assert get_detailed_instruct(prompt, queries[0]["text"], template=options.template) == data["data"]["text"][0], \
+            f'{get_detailed_instruct(prompt, queries[0]["text"], template=options.template)} != {data["data"]["text"][0]}'
+        results[f"prompt{i}"] = {**{"prompt_text": prompt}, **calculate_scores(options.k, corpus, queries, qrels, corpus_embeddings, query_embeddings)}
         i += 1
 
     os.makedirs(os.path.dirname(options.save_path), exist_ok=True)
@@ -270,24 +358,24 @@ if __name__=="__main__":
     # dowload dataset and preprocess
     if options.data_name == "mteb/ARCChallenge":
         # directs to HF-hub download
-        corpus, qrels, queries, qrels_dict = download_dataset("arcchallenge", "test", None, local=False, num_examples=options.num_examples)
+        corpus, queries, qrels = download_dataset("arcchallenge", "test", None, local=False, num_examples=options.num_examples)
         prompts=get_prompts_arcchallenge()
     elif options.data_name.lower() == "arcchallenge":
         # directs to local download with preprocessed data
-        corpus, qrels, queries, qrels_dict = download_dataset("arcchallenge", options.split, None, num_examples=options.num_examples)
+        corpus, queries, qrels = download_dataset("arcchallenge", options.split, None, num_examples=options.num_examples)
         prompts=get_prompts_arcchallenge()
     elif "tatoeba" in options.data_name.lower():
         assert ":" in options.data_name, "Give language to tatoeba separated by column :, e.g. tatoeba:fin-eng"
         tatoeba_, lang = options.data_name.split(":")
-        corpus, qrels, queries, qrels_dict = download_dataset("tatoeba", options.split, lang, num_examples=options.num_examples)
+        corpus, queries, qrels = download_dataset("tatoeba", options.split, lang, num_examples=options.num_examples)
         prompts=get_prompts_tatoeba(lang) if options.use_lang_specific_prompts else get_prompts_tatoeba()
     elif "summeval" in options.data_name.lower():
-        corpus, qrels, queries, qrels_dict = download_dataset("summeval", options.split, None, num_examples=options.num_examples)
+        corpus, queries, qrels = download_dataset("summeval", options.split, None, num_examples=options.num_examples)
         prompts=get_prompts_summeval()
     elif "webfaq" in options.data_name.lower():
         assert ":" in options.data_name, "Give language to webfaq separated by column :, e.g. webfaq:deu"
         webfaq_, lang = options.data_name.split(":")
-        corpus, qrels, queries, qrels_dict =  download_dataset("webfaq", options.split, lang, num_examples=options.num_examples)
+        corpus, queries, qrels =  download_dataset("webfaq", options.split, lang, num_examples=options.num_examples)
         prompts=get_prompts_webfaq(lang) if options.use_lang_specific_prompts else get_prompts_webfaq()
     # other datasets not implemented yet
     else:
@@ -313,8 +401,8 @@ if __name__=="__main__":
     if options.embeddings != "" and os.path.exists(options.embeddings):
         # we have precalculated embeddings
         report(f"Using precalculated embeddings at {options.embeddings} for score calculation")
-        read_embeddings_and_calculate_scores(options, prompts, corpus, queries, qrels_dict)
+        read_embeddings_and_calculate_scores(options, prompts, corpus, queries, qrels)
     else:
         # calculate everything from scratch
         report("Calculating embeddings and score")
-        embed_and_calculate_scores(options, prompts, corpus, queries, qrels_dict)
+        embed_and_calculate_scores(options, prompts, corpus, queries, qrels)

@@ -53,9 +53,8 @@ def download_arcchallenge_from_hub():
     queries = datasets.load_dataset("mteb/ARCChallenge", "queries")
     sanity_check_arcchallenge(corpus, qrels, queries)
     return corpus[split_to_select], \
-           qrels[split_to_select], \
            queries[split_to_select], \
-           create_binary_relevance_map_arcchallenge(qrels, split=split_to_select)
+           qrels[split_to_select]
 
 def download_arcchallenge(split_to_select="test", downsample=False):
     report(f"Downloading ARCChallenge ({split_to_select}) from local")
@@ -68,7 +67,7 @@ def download_arcchallenge(split_to_select="test", downsample=False):
                                          "text":ds[split_to_select]["query"]})
     qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
     del ds
-    return corpus, None, queries, qrels_map
+    return corpus, queries, qrels_map
 
 
 
@@ -83,7 +82,7 @@ def download_tatoeba_from_hub(lang, split_to_select="test", downsample=False):
                                          "text":ds[split_to_select]["sentence2"]}) # english
     qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
     del ds
-    return corpus, None, queries, qrels_map
+    return corpus, queries, qrels_map
 
 def download_tatoeba(lang, split_to_select="test", downsample=False):
     report(f"Downloading Tatoeba:{lang} ({split_to_select}) from local")
@@ -99,7 +98,7 @@ def download_tatoeba(lang, split_to_select="test", downsample=False):
                                          "text":ds[split_to_select]["english"]})  # english
     qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
     del ds
-    return corpus, None, queries, qrels_map
+    return corpus, queries, qrels_map
 
 def download_webfaq(lang, split_to_select="test", downsample=False):
     report(f"Downloading webfaq:{lang} ({split_to_select}) from local")
@@ -112,7 +111,7 @@ def download_webfaq(lang, split_to_select="test", downsample=False):
                                          "text":ds[split_to_select]["question2"]})
     qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
     del ds
-    return corpus, None, queries, qrels_map
+    return corpus, queries, qrels_map
 
 def download_summeval(split_to_select = "test", downsample=False):
     report(f"Downloading summeval ({split_to_select}) from local")
@@ -126,7 +125,7 @@ def download_summeval(split_to_select = "test", downsample=False):
                                          "text":ds[split_to_select]["summary"]})
     qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
     del ds
-    return corpus, None, queries, qrels_map
+    return corpus, queries, qrels_map
 
 
 def download_dataset(data_name, split, lang, local=True, num_examples=5000):
@@ -152,10 +151,13 @@ if __name__ == "__main__":
     lang=None
     split = "fit"
     local=False
-    corpus, qrels, queries, qrels_dict = download_dataset(data_name, split, lang, local=local, num_examples=40)
-    print(corpus)
-    print(queries)
-    print(qrels_dict)
+    corpus, qrels, queries = download_dataset(data_name, split, lang, local=local, num_examples=40)
+    assert isinstance(corpus, datasets.Dataset)
+    assert isinstance(queries, datasets.Dataset)
+    assert isinstance(qrels, datasets.Dataset) or isinstance(qrels, dict)
+    print(f"{corpus=}")
+    print(f"{queries=}")
+    print(f"{qrels=}")
     print("")
-    print(queries[qrels_dict])
-    print(corpus[5])
+    print(queries[0])
+    print(corpus[0])
