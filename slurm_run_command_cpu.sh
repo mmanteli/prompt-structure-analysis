@@ -16,7 +16,8 @@ module purge
 module use /appl/local/csc/modulefiles
 module load pytorch/2.7
 export PYTHONPATH=/scratch/project_462001394/amanda/pythonuserbase/lib/python3.11/site-packages:$PYTHONPATH
-export HF_HOME=/scratch/project_462001394/hf_cache 
-export HFKEY=$(cat ../hf_token.txt)  # for some reason this cannot be found from env?
+export HF_HOME=/scratch/project_462001394/hf_cache
+export DATAPATH=/flash/project_462001394/datasets/
+export HFKEY=$(cat ../hf_token.txt)
 
 srun "$@"
