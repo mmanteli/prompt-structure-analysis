@@ -27,18 +27,19 @@ is_lang_specific_data() {
 
 # ── First: structural analysis ──────────────────────────────────────
 
-for dataset in "arcchallenge" "summeval-2" "webfaq:deu" "webfaq:eng" "webfaq:zho"; do  #"tatoeba:fin-eng" "tatoeba:fra-eng" 
+for dataset in "arcchallenge" "summeval-2" "webfaq:deu" "webfaq:eng" "webfaq:zho" "tatoeba:fin-eng" "tatoeba:fra-eng"; do   
     for split in fit; do
         for template in "Instruct-Query" "simple"; do
             CMD=(python prompting_metrics.py \
                 --data_name=$dataset \
                 --split="$split" \
                 --template="$template" \
-                --save_prefix="prompt_metrics")
+                --save_prefix="prompt_metrics" \
+                --batch_size=4)
 
             wait_for_space
             echo "${dataset}:${split}_${template}"
-            sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}" -t 00:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}" -t 0:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
             
             if is_lang_specific_data $dataset; then
                 CMD=(python prompting_metrics.py \
@@ -46,11 +47,12 @@ for dataset in "arcchallenge" "summeval-2" "webfaq:deu" "webfaq:eng" "webfaq:zho
                     --data_name=$dataset \
                     --template="$template" \
                     --save_prefix="prompt_metrics" \
+                    --batch_size=4 \
                     --use_lang_specific_prompts)
 
                 wait_for_space
                 echo "${dataset}:${split}_${template}_lang_specific"
-                sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}_lang_specific" -t 00:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+                sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}_lang_specific" -t 0:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
             fi
         done
     done
