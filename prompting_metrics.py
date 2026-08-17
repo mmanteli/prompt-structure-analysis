@@ -6,12 +6,18 @@ import numpy as np
 import torch
 import jsonargparse
 import sys
+import random
+from evaluate_prompts import find_relevant_doc_id
 from scipy.spatial.distance import pdist, squareform
+from utils.dataset_handling import download_dataset
 from utils.prompts import get_prompts_arcchallenge, get_prompts_summeval, get_prompts_tatoeba, get_prompts_webfaq, get_detailed_instruct
 # this contains simply lists and dictionaries that help select the correct prompts
 
 cos = torch.nn.CosineSimilarity()
-
+# set random behaviour for replication
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
 
 parser = jsonargparse.ArgumentParser(prog="Measure structural changes in prompting")
 #parser.add_argument('--config', action=ActionConfigFile)
@@ -25,11 +31,21 @@ parser.add_argument('--template', type=str, default="Instruct-Query", choices=["
                     help="Which prompting template to use")
 parser.add_argument('--use_lang_specific_prompts', action='store_true',
                     help="Use prompts that specifically mention the target language, only for multilingual datasets.")
-parser.add_argument('--save_prefix', type=str, default="results_metrics",
-                    help="Saving path, model_name and k added in script")
+parser.add_argument('--k', type=int, default=10,
+                    help="which neighborhood size to use (for knn_ret and false_negs)")
 parser.add_argument('--batch_size', type=int, default=16,
-                    help="model.encode() batch size")
+                    help="batch size for embedding")
+parser.add_argument('--num_examples', type=int|bool, default=5000,
+                    help="For largest datasets, number of examples to downsample to, set to False for no downsampling")
+parser.add_argument('--embedding_prefix', type=str|bool, default=False,
+                    help="prefix to save embedings to, works similar to --save_prefix")
+parser.add_argument('--save_prefix', type=str, default="results_metrics",
+                    help="Saving path; model_name, data_name, prompt_type and k added in script")
 
+
+def report(msg):
+    # for quick flushing
+    print(f'{msg}', flush=True)
 
 def load_dataset(path):
     if os.path.exists(path):
@@ -38,7 +54,7 @@ def load_dataset(path):
 
 
 def unit_test():
-    """Function to test the similarity measures."""
+    """Function to test the angulation similarity measures."""
     # check that multidim calculations work, i.e. dimensions match
     Q = torch.Tensor([[1.,0.,0.], [0.5,0.,0.], [0.,2.,2.]])
     A = torch.Tensor([[1.,1.,0.], [0.,0.,1.], [0.,1.,1.]])
@@ -124,112 +140,99 @@ def knn_overlap_score(X, Y, k=10, metric="cosine", mode= "jaccard"):
         return [_jaccard_overlap(NX[i], NY[i]) for i in range(X.shape[0])]   # MEAN removed here, see stats()
 
 
-def looper(model_name, data_name, options):
+def create_one_to_one_correspondence(corpus, queries, qrels):
     """
-    Main logic: embed query and answer/target sides, and compare them to
-    the embedding of template(prompt, query).
+    For each query, find the best match in the corpus.
+    Return them in order, and additionally, return the 'unused'/'filler' corpus texts
     """
-    data_name_for_saving=data_name
-    # handle the language
-    lang=None
-    if ":" in data_name:
-        data_name, lang = data_name.split(":")
-    # load data
-    if data_name == "tatoeba":
-        if "-" in lang:   # tatoeba uses different lang scheme
-                lang_to_search_tatoeba = "en-"+lang.split("-")[0][:2]
-        else:
-            raise AttributeError("Give tatoeba lang in fin-eng, deu-eng, etc. format")
-        print(f"Reading /flash/project_462001394/datasets/tatoeba:{lang_to_search_tatoeba}")
-        data_path = f"/flash/project_462001394/datasets/tatoeba:{lang_to_search_tatoeba}"
-    elif data_name == "webfaq":
-        print(f"Reading /flash/project_462001394/datasets/web-faq-bitext:{lang}")
-        data_path = f"/flash/project_462001394/datasets/web-faq-bitext:{lang}"
-    elif data_name == "arcchallenge":
-        print("Reading /flash/project_462001394/datasets/arcchallenge")
-        data_path = "/flash/project_462001394/datasets/arcchallenge"
-    elif data_name == "summeval-2":
-        print("Reading /flash/project_462001394/datasets/summeval-2")
-        data_path = "/flash/project_462001394/datasets/summeval-2"
-    ds = load_dataset(data_path)
-    print(f"Dataset loaded:\n{ds}")
-    # which columns to read
-    columns = {"arcchallenge": ('query', 'document'),
-               "tatoeba": ('english', 'non_english'),
-               "summeval-2": ('summary','text'),
-               "webfaq": ("question2", "answer2")}[data_name]
+    # if the dataset is already sorted in this way
+    if len(corpus) == len(queries) and qrels == {k:k for k in range(len(queries))}:
+        return corpus["text"], queries["text"], None
+    questions = []
+    targets = []
+    found_ids = set()
+    # loop over queries
+    for line in queries:
+        q_id, q_text = line["_id"], line["text"]
+        #print(f"Now in {q_id=}, {q_text=}")
+        # find the relevant answers based on the query id
+        # this funtion returns the best match at the top of the list
+        relevant_ids, assoc_scores = find_relevant_doc_id(q_id, qrels)
+        #print(f"{relevant_ids=}, {assoc_scores=}")
+        most_relevant_id = relevant_ids[0]
+        found = [l for l in corpus if l["_id"] == most_relevant_id]
+        assert len(found) == 1, f"Duplicate ids in corpus, {most_relevant_id=} resulted in {found=}"
+        c_id, c_text = found[0]["_id"], found[0]["text"]
+        questions.append(q_text)
+        targets.append(c_text)
+        found_ids.add(most_relevant_id)  # here we could also choose all relevant ids
+    unmatched_targets = corpus.filter(lambda example: example["_id"] not in found_ids)
+    return  targets, questions, unmatched_targets["text"]
 
-    split = options.split
-    queries = ds[split][columns[0]]
-    answers = ds[split][columns[1]]
 
+
+
+def calculate_metrics(model_name, queries, answers, prompts, template, wrong_answers=None, k=10, batch_size=8):
+    """
+    model_name: path or huggingface alias
+    queries: datasets-object with columns "_id" and "text"
+    anwers: datasets-object with columns "_id" and "text"
+        NOTE: queries and corpus need to have 1 to 1 correspondence, i.e. no qrels here
+    prompts: prompts to iterate over
+    wrong_answers: "leftovers" from corpus, texts that do not correpond to a query. These
+        will be added in the "negative" metrics
+    k = number of neighbors considered. for kNN, it is on the query and target side (1 to 1)
+        while in the negative metrics, it is on the target side
+    """
     # load the model
     model = SentenceTransformer(model_name, trust_remote_code=True)
     print("Model loaded.")
     # embed the "ground truth values": regular queries and targets
-    embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=options.batch_size)
-    embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=options.batch_size)
+    embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+    embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+    # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
+    if wrong_answers:
+        embeddings_wa = model.encode(wrong_answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+    else:
+        embeddings_wa = torch.tensor([]).to(model.device)  # empty, has no effect on the calculation later
 
-    # Chord vector from query to answer
+    # calculate everything we can calculate without using the prompt
+    # chord vector from query to answer
     delta_a = embeddings_a - embeddings_q  # (N, D)
 
-    # Baseline: how similar are q and a without any prompt?
+    # baseline: how similar are q and a without any prompt?
     sim_qa = cos(embeddings_q, embeddings_a)  # (N,)
 
-    # Negatives for Metrics 6 & 7
+    # negatives for metrics 6 & 7: here we can add the wrong answers (if they exist)
     N = embeddings_q.shape[0]
-    k_hard = min(10, N - 1)
-    # Full query-to-answer similarity matrix (embeddings are L2-normed)
-    sim_q_all = torch.mm(embeddings_q, embeddings_a.T) # (N, N)
+    k_hard = min(k, N - 1)
+    # add the filler
+    sim_q_all = torch.mm(embeddings_q, torch.concat((embeddings_a, embeddings_wa)).T)
     # For each query, find indices of k nearest *wrong* answers
+    # since embeddings_q and embeddings_a are in order, and we just append embeddings_wa
+    # we can still just mask the "diagonal" (i)
+    # but then just search the larger area in torch.topk
     hard_neg_indices = []
     for i in range(N):
         sims_i = sim_q_all[i].clone()
         # mask out the correct pair
         sims_i[i] = -float('inf')
         hard_neg_indices.append(torch.topk(sims_i, k_hard).indices)
-
-    # select prompts to use
-    # language specific: prompt uses language, e.g. "Translate the sentence to French"
-    if options.use_lang_specific_prompts:
-        print(f"Trying to resolve lang specific prompts with {data_name} {lang}")
-        if data_name == "tatoeba":
-            prompts_to_try = get_prompts_tatoeba(lang=lang)
-        elif data_name == "webfaq":
-            prompts_to_try = get_prompts_webfaq(lang=lang)
-        else:
-            raise AttributeError(f"{data_name} does not have a lang-specific prompt option.")
-    else:
-        # language-independent options
-        prompts_to_try={"arcchallenge": get_prompts_arcchallenge(),
-                        "tatoeba": get_prompts_tatoeba(),
-                        "summeval-2": get_prompts_summeval(),
-                        "webfaq": get_prompts_webfaq()}[data_name]
-
-    # Manually add two prompt options for baseline:
-    # for non-simple prompts, add 
-    #   NO_PROMPT => returns only q (for knn calc, redundant to embed but easier to modify later), saved as "NO_PROMPT"
-    #   "" => empty, baseline which only includes the word "Instruct" to see its effect, saved as "empty"
-    # for simple template, only the NO_PROMPT option (no word instruct in simple template)
-    if options.template != "simple":
-        prompts_to_try = ["NO_PROMPT", ""] + prompts_to_try
-    else:
-        prompts_to_try = ["NO_PROMPT"] + prompts_to_try
     
     # calculate metrics per prompt
     results = {}
-    for i, p in enumerate(prompts_to_try):
-        # apply template and embed
-        prompts_and_queries = [get_detailed_instruct(p, q, template=options.template) for q in queries]
+    for i, p in enumerate(prompts):
+        # apply template and embed the prompt+query
+        prompts_and_queries = [get_detailed_instruct(p, q, template=template) for q in queries]
         # sanity check printout: see that template is filled correctly
         print(f"Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")  
-        embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=options.batch_size)
+        embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
 
-        # Chord vector from query to prompted query
+        # Chord vector from query to prompted query ( to compare with delta_a)
         delta_pq = embeddings_pq - embeddings_q  # (N, D)
 
         # ---- Metric 1: Angulation toward answer ----
-        # Cosine similarity between the two chord vectors
+        # cosine similarity between the two chord vectors
         # "Does the prompt move the query in the same direction as the answer?"
         chord_sim = cos(delta_a, delta_pq)  # (N,)
 
@@ -263,15 +266,17 @@ def looper(model_name, data_name, options):
 
         # ---- Metric 5: knn retention ----
         # "Does adding prompt make the query side structure resemble the answer side"
-        knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu())
+        knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu(), k=k)
 
         # ---- Metric 6: displacement vs. wrong answers ----
         # "Does adding prompt take you away from incorrect answers?"
         # For the k-hardest wrong answers (most similar to the unprompted query),
         # measure how much their similarity changes after prompting.
         # Negative = prompt moved query away from hard negatives (desirable).
-        sim_pq_all = torch.mm(embeddings_pq, embeddings_a.T)        # (N, N)
-        hard_neg_sim_change = torch.tensor([
+        # so, add multiplication by -1 
+        # now positive = desirable
+        sim_pq_all = torch.mm(embeddings_pq, torch.concat((embeddings_a, embeddings_wa)).T)
+        hard_neg_sim_change = -1*torch.tensor([
             (sim_pq_all[i, hard_neg_indices[i]]
             - sim_q_all[i, hard_neg_indices[i]]).mean().item()
             for i in range(N)
@@ -283,13 +288,15 @@ def looper(model_name, data_name, options):
         # from the query to that wrong answer, then measure cosine with delta_pq.
         # Positive = prompt pushes toward hard negatives (undesirable).
         # Negative = prompt pushes away from hard negatives (desirable).
-        hard_neg_angulation = torch.tensor([
+        # so again, multiply by -1
+        all_embeddings = torch.cat((embeddings_a, embeddings_wa))  # (N+M, D)
+        hard_neg_angulation = -1 * torch.tensor([
             cos(
-                delta_pq[i].unsqueeze(0).expand(k_hard, -1),
-                embeddings_a[hard_neg_indices[i]] - embeddings_q[i]
+                delta_pq[i].unsqueeze(0).expand(k_hard, -1),    # (k_hard, D)
+                all_embeddings[hard_neg_indices[i]] - embeddings_q[i]  # (k_hard, D)
             ).mean().item()
             for i in range(N)
-        ])  # (N,)
+        ])
 
         def stats(t):
             """Extract summary statistics"""
@@ -319,55 +326,59 @@ def looper(model_name, data_name, options):
             "hard_neg_angulation":  stats(hard_neg_angulation), # angle toward hard negatives
         }
 
-    model_name_safe = model_name.replace("/", "__")
-    specific_prompts = "_specific_prompts" if options.use_lang_specific_prompts else ""
-    save_path = f"{options.save_prefix}/{model_name_safe}/{data_name_for_saving}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
-    os.makedirs(save_path, exist_ok=True)
-    with open(f'{save_path}/prompt_geometry.json', 'w') as f:
-        json.dump(results, f, indent=2)
+    return results
+
+    
 
 
 if __name__=="__main__":
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "test":
-            # run "unit test"
-            unit_test()
-            sys.exit()
-        else:
-            pass
-            #print("Usage: no params (default: prompt comparison) OR one param: \
-            #    test: unit test, answer/A: answer comparison, prompt/P: prompt comparison.")
-    # parse arguments
     options = parser.parse_args()
-    # set default values for data and model
-    if options.data_name is None:
-        if options.use_lang_specific_prompts:
-            options.data_name = [
-                            "tatoeba:fin-eng",
-                            "tatoeba:fra-eng",
-                            "webfaq:deu",
-                            "webfaq:eng"]
-        else:
-            options.data_name = ["arcchallenge",
-                            "summeval-2",
-                            "tatoeba:fin-eng",
-                            "tatoeba:fra-eng",
-                            "webfaq:deu",
-                            "webfaq:eng"]
-    elif isinstance(options.data_name, str):
-        options.data_name = [options.data_name]
-    if options.model_name is None:
-        options.model_name = ["BAAI/bge-m3",
-              "Qwen/Qwen3-Embedding-0.6B",
-              "intfloat/multilingual-e5-small",
-              "intfloat/multilingual-e5-large-instruct",
-              "minishlab/potion-base-8M",
-              "google/embeddinggemma-300m"]
-    elif isinstance(options.model_name, str):
-        options.model_name = [options.model_name]
+    # dowload dataset and preprocess
+    lang = None # initialize
+    if options.data_name == "mteb/ARCChallenge":
+        # directs to HF-hub download
+        corpus, queries, qrels = download_dataset("arcchallenge", "test", None, local=False, num_examples=options.num_examples)
+        prompts=get_prompts_arcchallenge()
+    elif options.data_name.lower() == "arcchallenge":
+        # directs to local download with preprocessed data
+        corpus, queries, qrels = download_dataset("arcchallenge", options.split, None, num_examples=options.num_examples)
+        prompts=get_prompts_arcchallenge()
+    elif "tatoeba" in options.data_name.lower():
+        assert ":" in options.data_name, "Give language to tatoeba separated by column :, e.g. tatoeba:fin-eng"
+        tatoeba_, lang = options.data_name.split(":")
+        corpus, queries, qrels = download_dataset("tatoeba", options.split, lang, num_examples=options.num_examples)
+        prompts=get_prompts_tatoeba(lang) if options.use_lang_specific_prompts else get_prompts_tatoeba()
+    elif "summeval" in options.data_name.lower():
+        corpus, queries, qrels = download_dataset("summeval", options.split, None, num_examples=options.num_examples)
+        prompts=get_prompts_summeval()
+    elif "webfaq" in options.data_name.lower():
+        assert ":" in options.data_name, "Give language to webfaq separated by column :, e.g. webfaq:deu"
+        webfaq_, lang = options.data_name.split(":")
+        corpus, queries, qrels =  download_dataset("webfaq", options.split, lang, num_examples=options.num_examples)
+        prompts=get_prompts_webfaq(lang) if options.use_lang_specific_prompts else get_prompts_webfaq()
+    # other datasets not implemented yet
+    else:
+        raise NotImplementedError("Only ARCChallenge+Tatoeba+Summeval+WebFAQ implemented")
+    report("Sanity check: What was downloaded?")
+    report(prompts[0])
+    report(queries[0])
+    report(corpus[0])
+    # add a few prompts based on the template (function as baselines)
+    if options.template != "simple":
+        # These map to NO_PROMPT=vanilla query and EMPTY: misfilled template
+        prompts = ["NO_PROMPT", "EMPTY"] + prompts
+    else:
+        # For the simple template, only vanilla query
+        prompts = ["NO_PROMPT"] + prompts
 
-    # loop over models and datasets
-    for d in options.data_name:
-        for m in options.model_name:
-            print(f"Starting model {m} on {d}")
-            looper(m, d, options)
+    targets, questions, filler_targets = create_one_to_one_correspondence(corpus, queries, qrels)
+    print(f"Sanity check\n{questions[0]=}\n{targets[0]}")
+    results = calculate_metrics(options.model_name, questions, targets, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size)
+    
+    model_name_safe = options.model_name.replace("/", "__")
+    data_safe_name = options.data_name.replace("/","__")
+    specific_prompts = "_specific_prompts" if options.use_lang_specific_prompts else ""
+    save_path = f"{options.save_prefix}/{model_name_safe}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
+    os.makedirs(save_path, exist_ok=True)
+    with open(f'{save_path}/prompt_geometry.json', 'w') as f:
+        json.dump(results, f, indent=2)
