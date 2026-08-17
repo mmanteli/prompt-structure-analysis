@@ -88,5 +88,40 @@ def find_relevant_doc_id(query_id, qrels):
     return (associated_corpus_values[indices_that_sort].tolist(), associated_corpus_scores[indices_that_sort].tolist())
 
 
+
+def sanity_check_one_to_one_correspondence():
+    """
+    For each query, find the best match in the corpus.
+    Return them in order, and additionally, return the 'unused' corpus texts
+    """
+    corpus = datasets.Dataset.from_dict({"_id":["c14","c21","c33","c41"], "text":["text a","text b","text c","text d"]})
+    queries = datasets.Dataset.from_dict({"_id": ["q1", "q2", "q4"], "text":["correct is mostly a, but d is okay", "correct is c", "correct is d"]})
+    qrels = datasets.Dataset.from_dict({"query_id":["q1", "q1", "q2", "q4",], "corpus_id":["c14", "c41", "c33", "c41",], "score": [1, 0.9, 1, 1]})
+    # if the dataset is already sorted in this way
+    if len(corpus) == len(queries) and qrels == {k:k for k in range(len(queries))}:
+        return corpus["text"], queries["text"], None
+    questions = []
+    targets = []
+    found_ids = set()
+    # loop over queries
+    for line in queries:
+        q_id, q_text = line.values()
+        print(f"Now in {q_id=}, {q_text=}")
+        # find the relevant answers based on the query id
+        relevant_ids, assoc_scores = find_relevant_doc_id(q_id, qrels)
+        print(f"{relevant_ids=}, {assoc_scores=}")
+        # best match is at the top of the list
+        most_relevant_id = relevant_ids[0]
+        c_id, c_text = [l for l in corpus if l["_id"] == most_relevant_id][0].values()
+        print(f"Found {c_id=}, {c_text=}")
+        questions.append(q_text)
+        targets.append(c_text)
+        found_ids.add(most_relevant_id)  # here we could also choose all relevant ids
+    unmatched_targets = corpus.filter(lambda example: example["_id"] not in found_ids)
+    print(f"{unmatched_targets['text']=}")
+    return  targets, questions, unmatched_targets["text"]
+
+
 if __name__=="__main__":
-    sanity_check_logic(k=3)
+    #sanity_check_logic(k=3)
+    sanity_check_one_to_one_correspondence()
