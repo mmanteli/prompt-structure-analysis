@@ -54,7 +54,7 @@ def download_arcchallenge_from_hub():
     sanity_check_arcchallenge(corpus, qrels, queries)
     return corpus[split_to_select], \
            queries[split_to_select], \
-           qrels[split_to_select]
+           qrels[split_to_select].rename_column("query-id","query_id").rename_column("corpus-id", "corpus_id")
 
 def download_arcchallenge(split_to_select="test", downsample=False):
     report(f"Downloading ARCChallenge ({split_to_select}) from local")
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     lang=None
     split = "fit"
     local=False
-    corpus, qrels, queries = download_dataset(data_name, split, lang, local=local, num_examples=40)
+    corpus, queries, qrels = download_dataset(data_name, split, lang, local=local, num_examples=40)
     assert isinstance(corpus, datasets.Dataset)
     assert isinstance(queries, datasets.Dataset)
     assert isinstance(qrels, datasets.Dataset) or isinstance(qrels, dict)
@@ -160,4 +160,5 @@ if __name__ == "__main__":
     print(f"{qrels=}")
     print("")
     print(queries[0])
-    print(corpus[0])
+    print(corpus[2])
+    print(qrels[0])
