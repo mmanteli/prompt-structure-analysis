@@ -34,13 +34,11 @@ parser.add_argument('--use_lang_specific_prompts', '--use_language_specific_prom
 parser.add_argument('--k', '--MRR@k', type=int, default=10,
                     help="Which k to use for MRR and Recall")
 parser.add_argument('--batch_size', type=int, default=16,
-                    help="Which k to use")
+                    help="Batch size for embedding")
 parser.add_argument('--num_examples', type=int|bool, default=5000,
                     help="For largest datasets, number of examples to downsample to, set to False for no downsampling")
 parser.add_argument('--embedding_prefix', type=str|bool, default=False,
                     help="prefix to save embedings to, works similar to --save_prefix")
-#parser.add_argument('--domain', choices = ["A", "QA"], default="A",
-#                    help='Which set to search the target from, only target side:A, both:QA')  # TODO impelement this
 parser.add_argument('--save_prefix', type=str, default="results_prompts",
                     help="Saving path; model_name, data_name, prompt_type and k added in script")
 
