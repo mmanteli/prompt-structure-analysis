@@ -10,7 +10,8 @@ import random
 from evaluate_prompts import find_relevant_doc_id
 from scipy.spatial.distance import pdist, squareform
 from utils.dataset_handling import download_dataset
-from utils.prompts import get_prompts_arcchallenge, get_prompts_summeval, get_prompts_tatoeba, get_prompts_webfaq, get_detailed_instruct
+from utils.prompts import get_prompts, get_detailed_instruct
+from prompting_metrics import pairwise_distances, knn_overlap_score
 # this contains simply lists and dictionaries that help select the correct prompts
 
 cos = torch.nn.CosineSimilarity()
@@ -53,92 +54,6 @@ def load_dataset(path):
     return datasets.load_dataset(path)
 
 
-def unit_test():
-    """Function to test the angulation similarity measures."""
-    # check that multidim calculations work, i.e. dimensions match
-    Q = torch.Tensor([[1.,0.,0.], [0.5,0.,0.], [0.,2.,2.]])
-    A = torch.Tensor([[1.,1.,0.], [0.,0.,1.], [0.,1.,1.]])
-    # Q1->A1: 45 degree, should be 0.7071
-    # Q2->A2: 90 degree, should be 0
-    # Q3->A3: same direction, should be 1
-    for i, j in zip(cos(Q,A), torch.tensor([0.7071, 0.0, 1.0])):
-        assert np.isclose(i,j, atol=1e-4), f"Test 1 not passed, {i}, {j}"
-    # subtracting query --> measuring angle wrt. vector A-Q, not wrt. origin
-    # i.e. see the angle of Q->P compared to Q->A
-    Q = torch.Tensor([[2.,4.], [2.,4.], [-4.,2.]])
-    A = torch.Tensor([[6.,4.], [6.,4.], [-2.,4.]])
-    P = torch.Tensor([[4.,5.], [2.,2.],[-4.,3.]])
-    A__Q = A-Q
-    P__Q = P-Q
-    # A__Q1 & P__Q1: 2/np.sqrt(5) = 0.89442
-    # A__Q2 & P__Q2: 90 degrees, so should be 0
-    # A__Q3 & P__Q3: 45 degrees, from triangle = adj/hypot = (np.sqrt(2)/2)/1 = 1/ np.sqrt(2) = 0.7071
-    for i,j in zip(cos(A__Q, P__Q), torch.Tensor([0.8944, 0.0, 0.7071])):
-        assert np.isclose(i,j, atol=1e-4), f"Test 2 not passed, {i}-{j}"
-    print("Success: All tests passed.")
-
-def _as_2d_float(a):
-    a = np.asarray(a, dtype=np.float64)
-    if a.ndim != 2:
-        raise ValueError(f"Expected 2D array, got shape {a.shape}")
-    return a
-
-def pairwise_distances(X, metric="cosine"):
-    """Make a pairwise distance matrix for input X"""
-    X = _as_2d_float(X)
-    return squareform(pdist(X, metric=metric))
-
-def knn_indices_from_distance_matrix(D, k:int):
-    """
-    Return indices of k nearest neighbors for each row i, excluding self.
-    D: NxN pairwise distances.
-    Output: Nxk integer array of indices.
-    """
-    D = np.asarray(D)
-    N = D.shape[0]
-    if D.shape != (N, N):
-        raise ValueError("D must be sqaure")
-    if not (1 <= k <= N - 1):
-        raise ValueError(f"k value must be in [1, {N-1}], got {k}")
-    idx = np.argsort(D, axis=1)
-    # exclude self -> d(self, self) == 0, always the first index
-    idx = idx[:, 1:k+1]
-    return idx
-
-def _jaccard_overlap(a, b):
-    """Jaccard overlap for two 1D integer arrays (as sets)."""
-    sa = set(map(int, a))
-    sb = set(map(int, b))
-    inter = len(sa & sb)
-    union = len(sa | sb)
-    return inter / union if union else 1.0  # return 1 for no sets -> will not happen if k>0
-
-
-def knn_overlap_score(X, Y, k=10, metric="cosine", mode= "jaccard"):
-    """
-    Calculate the average neighborhood preservation score, 0 to 1
-      - "recall": |N_k^X(i) ∩ N_k^Y(i)| / k
-      - "jaccard": Jaccard(N_k^X(i), N_k^Y(i))
-    This function does not return the mean but individual values.
-    """
-    assert mode in ["recall", "jaccard"], f"Mode needs to be recall or jaccard, now {mode}"
-    assert X.shape[0] == Y.shape[0], f"X and Y must have the same number of instances, X.shape={X.shape}, Y.shape={Y.shape}"
-
-    DX = pairwise_distances(X, metric=metric)
-    DY = pairwise_distances(Y, metric=metric)
-
-    NX = knn_indices_from_distance_matrix(DX, k)
-    NY = knn_indices_from_distance_matrix(DY, k)
-
-    if mode == "recall":
-        scores = []
-        for i in range(X.shape[0]):
-            scores.append(len(set(NX[i]) & set(NY[i])) / k)
-        return scores   # MEAN removed here, see stats()
-
-    else:
-        return [_jaccard_overlap(NX[i], NY[i]) for i in range(X.shape[0])]   # MEAN removed here, see stats()
-
 
 def create_STS_correspondence(corpus, queries, qrels, minmax=None):
     """
@@ -146,6 +61,13 @@ def create_STS_correspondence(corpus, queries, qrels, minmax=None):
     Return them in order, and additionally, return the 'unused'/'filler' corpus texts
     minmax=(low, high) for range of scores, otherwise calculated from data
     """
+    # check if we already have the structure we need, if so, only normalize the scores==qrels
+    if isinstance(qrels, list) and isinstance(corpus, list) and isinstance(queries, list) and len(corpus) == len(queries) == len(qrels):
+        max_score, min_score = np.max(qrels), np.min(qrels) if minmax is None else minmax
+        scores = np.array([2*(s-min_score)/(max_score-min_score)-1 for s in qrels])
+        return corpus, queries, scores, None
+    # otherwise, construct them
+    # here using question/target simply not to cofuse with the corpus and query variable names
     questions = []
     targets = []
     scores = []
@@ -317,20 +239,24 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
                     "q25": float(np.percentile(arr, 25)),
                     "q75": float(np.percentile(arr, 75))}
 
+        # finally, the difference: weight the results with score
+        # works specifically well for the angles (bad angle that should be bad == good angle)
+        # similarly for displacement, arguably for knn
+        #scores = torch.tensor(scores).to(model.device)
         results[f"prompt{i}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
             "example_text": prompts_and_queries[0],             # example text as a sanity check
-            "chord_similarity":     stats(chord_sim*scores),           # angulation (same as par. fraction)
-            "sim_q_a":              stats(sim_qa*scores),              # baseline similarity
-            "sim_pq_a":             stats(sim_pqa*scores),             # prompted similarity
-            "sim_improvement":      stats(sim_improvement*scores),     # delta
-            "displacement":         stats(displacement*scores),        # how far prompt moved q
-            "parallel_magnitude":   stats(parallel_magnitude*scores),  # movement toward answer (signed)
-            "orthogonal_magnitude": stats(orthogonal_magnitude*scores),# movement sideways
-            "parallel_fraction":    stats(parallel_fraction*scores),   # fraction toward answer
-            "knn_retention":        stats(knn_retention*scores),       # how much structure we gain
-            "hard_neg_sim_change":  stats(hard_neg_sim_change*scores), # sim change to hard negatives
-            "hard_neg_angulation":  stats(hard_neg_angulation*scores), # angle toward hard negatives
+            "chord_similarity":     stats(np.array(chord_sim.cpu())*scores),           # angulation (same as par. fraction)
+            "sim_q_a":              stats(np.array(sim_qa.cpu())*scores),              # baseline similarity
+            "sim_pq_a":             stats(np.array(sim_pqa.cpu())*scores),             # prompted similarity
+            "sim_improvement":      stats(np.array(sim_improvement.cpu())*scores),     # delta
+            "displacement":         stats(np.array(displacement.cpu())*scores),        # how far prompt moved q
+            "parallel_magnitude":   stats(np.array(parallel_magnitude.cpu())*scores),  # movement toward answer (signed)
+            "orthogonal_magnitude": stats(np.array(orthogonal_magnitude.cpu())*scores),# movement sideways
+            "parallel_fraction":    stats(np.array(parallel_fraction.cpu())*scores),   # fraction toward answer
+            "knn_retention":        stats(np.array(knn_retention)*scores),       # how much structure we gain
+            "hard_neg_sim_change":  stats(np.array(hard_neg_sim_change.cpu())*scores), # sim change to hard negatives
+            "hard_neg_angulation":  stats(np.array(hard_neg_angulation.cpu())*scores), # angle toward hard negatives
         }
 
     return results
@@ -343,7 +269,7 @@ if __name__=="__main__":
     options = parser.parse_args()
     # dowload dataset and preprocess
     lang = None # initialize
-    corpus, queries, qrels = download_dataset(options.data_name, options.split)
+    corpus, queries, qrels = download_dataset(options.data_name, split_to_select=options.split)
     prompts = get_prompts(options.data_name)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
@@ -357,7 +283,7 @@ if __name__=="__main__":
         # For the simple template, only vanilla query
         prompts = ["NO_PROMPT"] + prompts
 
-    targets, questions, filler_targets = create_STS_correspondence(corpus, queries, qrels)
+    targets, questions, scores, filler_targets = create_STS_correspondence(corpus, queries, qrels)
     print(f"Sanity check\n{questions[0]=}\n{targets[0]}")
     results = calculate_metrics(options.model_name, questions, targets, scores, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size)
     

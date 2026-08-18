@@ -10,7 +10,7 @@ import random
 from evaluate_prompts import find_relevant_doc_id
 from scipy.spatial.distance import pdist, squareform
 from utils.dataset_handling import download_dataset
-from utils.prompts import get_prompts_arcchallenge, get_prompts_summeval, get_prompts_tatoeba, get_prompts_webfaq, get_detailed_instruct
+from utils.prompts import get_prompts, get_detailed_instruct
 # this contains simply lists and dictionaries that help select the correct prompts
 
 cos = torch.nn.CosineSimilarity()
@@ -334,31 +334,13 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
 if __name__=="__main__":
     options = parser.parse_args()
     # dowload dataset and preprocess
-    lang = None # initialize
-    if options.data_name == "mteb/ARCChallenge":
-        # directs to HF-hub download
-        corpus, queries, qrels = download_dataset("arcchallenge", "test", None, local=False, num_examples=options.num_examples)
-        prompts=get_prompts_arcchallenge()
-    elif options.data_name.lower() == "arcchallenge":
-        # directs to local download with preprocessed data
-        corpus, queries, qrels = download_dataset("arcchallenge", options.split, None, num_examples=options.num_examples)
-        prompts=get_prompts_arcchallenge()
-    elif "tatoeba" in options.data_name.lower():
-        assert ":" in options.data_name, "Give language to tatoeba separated by column :, e.g. tatoeba:fin-eng"
-        tatoeba_, lang = options.data_name.split(":")
-        corpus, queries, qrels = download_dataset("tatoeba", options.split, lang, num_examples=options.num_examples)
-        prompts=get_prompts_tatoeba(lang) if options.use_lang_specific_prompts else get_prompts_tatoeba()
-    elif "summeval" in options.data_name.lower():
-        corpus, queries, qrels = download_dataset("summeval", options.split, None, num_examples=options.num_examples)
-        prompts=get_prompts_summeval()
-    elif "webfaq" in options.data_name.lower():
-        assert ":" in options.data_name, "Give language to webfaq separated by column :, e.g. webfaq:deu"
-        webfaq_, lang = options.data_name.split(":")
-        corpus, queries, qrels =  download_dataset("webfaq", options.split, lang, num_examples=options.num_examples)
-        prompts=get_prompts_webfaq(lang) if options.use_lang_specific_prompts else get_prompts_webfaq()
-    # other datasets not implemented yet
-    else:
-        raise NotImplementedError("Only ARCChallenge+Tatoeba+Summeval+WebFAQ implemented")
+    lang=None
+    # if lang is given with column notation
+    if ":" in options.data_name:
+        options.data_name, lang = options.data_name.split(":")
+
+    corpus, queries, qrels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
+    prompts = get_prompts(options.data_name, lang=lang)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
     report(queries[0])
