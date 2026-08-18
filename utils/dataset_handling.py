@@ -71,8 +71,9 @@ def download_arcchallenge(split_to_select="test", downsample=False):
 
 
 
-def download_tatoeba_from_hub(lang, split_to_select="test", downsample=False):
+def download_tatoeba_from_hub(lang=None, split_to_select="test", downsample=False):
     report(f"Downloading Tatoeba:{lang} ({split_to_select}) from hf-hub")
+    assert lang is not None, f"{lang=} give a language"
     ds = datasets.load_dataset("mteb/tatoeba-bitext-mining", lang)
     if downsample:
         ds[split_to_select] = downsample_with_seed(ds[split_to_select], rows=downsample)
@@ -84,7 +85,7 @@ def download_tatoeba_from_hub(lang, split_to_select="test", downsample=False):
     del ds
     return corpus, queries, qrels_map
 
-def download_tatoeba(lang, split_to_select="test", downsample=False):
+def download_tatoeba(lang=None, split_to_select="test", downsample=False):
     report(f"Downloading Tatoeba:{lang} ({split_to_select}) from local")
     lang_ = "en-" + lang.split("-")[0][:2]
     if lang_ == "en-bu":   # bad, i know
@@ -100,7 +101,7 @@ def download_tatoeba(lang, split_to_select="test", downsample=False):
     del ds
     return corpus, queries, qrels_map
 
-def download_webfaq(lang, split_to_select="test", downsample=False):
+def download_webfaq(lang=None, split_to_select="test", downsample=False):
     report(f"Downloading webfaq:{lang} ({split_to_select}) from local")
     ds = datasets.load_from_disk(f"{path_to_data}web-faq-bitext:{lang}")
     if downsample:
@@ -127,38 +128,67 @@ def download_summeval(split_to_select = "test", downsample=False):
     del ds
     return corpus, queries, qrels_map
 
+def download_stsbench(split_to_select="test", downsample=False):
+    print(f"Donwnloading mteb/stsbenchmark-sts ({split_to_select})")
+    ds = datasets.load_dataset("mteb/stsbenchmark-sts")[split_to_select]
+    return ds["sentence2"], ds["sentence1"], ds["score"]
 
-def download_dataset(data_name, split, lang, local=True, num_examples=5000):
-    if local:
-        if data_name.lower() == "arcchallenge":
-            return download_arcchallenge(split_to_select=split, downsample=num_examples)
-        if data_name.lower() == "summeval" or data_name.lower() == "summeval-2":
-            return download_summeval(split_to_select=split, downsample=num_examples)
-        assert lang is not None, f"{data_name} requires setting lang, now {lang=}"
-        if data_name.lower() == "tatoeba":
-            return download_tatoeba(lang, split_to_select=split, downsample=num_examples)
-        if data_name.lower() == "webfaq":
-            return download_webfaq(lang, split_to_select=split, downsample=num_examples)
-    else:
-        if data_name == "mteb/ARCChallenge" or data_name.lower() == "arcchallenge":
-            return download_arcchallenge_from_hub()
-        if data_name == "Tatoeba":
-            return download_tatoeba_from_hub(lang, split_to_select=split, downsample=num_examples)
-        raise NotImplementedError(f"Unable to download a dataset with arguments {data_name=} {split=} {lang=}, {local=}")
+def download_redditclustering(split_to_select="test", downsample=False, subsplit=0):
+    report(f"Downloading mteb/reddit-clustering ('test') with index {subsplit}")
+    ds = datasets.load_dataset("mteb/reddit-clustering")["test"][subsplit]
+    return ds["sentences"], None, ds["labels"]
+
+def download_dataset(data_name, **kwargs):
+    if data_name.lower() == "arcchallenge":
+        return download_arcchallenge(**kwargs)
+    if data_name.lower() == "summeval" or data_name.lower() == "summeval-2":
+        return download_summeval(**kwargs)
+    if data_name.lower() == "tatoeba":
+        return download_tatoeba(**kwargs)
+    if data_name.lower() == "webfaq":
+        return download_webfaq(**kwargs)
+    if data_name == "mteb/ARCChallenge" or data_name.lower() == "arcchallenge":
+        return download_arcchallenge_from_hub(**kwargs)
+    if data_name == "mteb/tatoeba-bitext-mining":
+        return download_tatoeba_from_hub(**kwargs)
+    if data_name == "mteb/stsbenchmark-sts":
+        return download_stsbench(**kwargs)
+    if data_name == "mteb/reddit-clustering":
+        return download_redditclustering(**kwargs)
+    raise NotImplementedError(f"Unable to download a dataset with arguments {data_name=} {kwargs}")
 
 if __name__ == "__main__":
     data_name="mteb/ARCChallenge"
-    lang=None
-    split = "fit"
-    local=False
-    corpus, queries, qrels = download_dataset(data_name, split, lang, local=local, num_examples=40)
+    corpus, queries, qrels = download_dataset(data_name)
     assert isinstance(corpus, datasets.Dataset)
     assert isinstance(queries, datasets.Dataset)
     assert isinstance(qrels, datasets.Dataset) or isinstance(qrels, dict)
-    print(f"{corpus=}")
-    print(f"{queries=}")
-    print(f"{qrels=}")
-    print("")
+    #print(f"{corpus=}")
+    #print(f"{queries=}")
+    #print(f"{qrels=}")
+    #print("")
+    print(qrels[0])
     print(queries[0])
     print(corpus[2])
-    print(qrels[0])
+    print("\n\n")
+
+    data_name="mteb/reddit-clustering"
+    corpus, _, labels = download_dataset(data_name, subsplit=0)
+    assert isinstance(corpus, list), f"{type(corpus)=}"
+    assert isinstance(labels, list), f"{type(labels)=}"
+    print(f"{corpus[0]=}")
+    print(f"{labels[0]=}")
+    print("\n\n")
+
+    data_name="mteb/stsbenchmark-sts"
+    corpus, queries, scores = download_dataset(data_name)
+    print(corpus[0])
+    print(queries[0])
+    print(scores[0])
+    print("\n\n")
+
+    data_name="mteb/tatoeba-bitext-mining"
+    lang="fin-eng"
+    corpus, queries, qrels = download_dataset(data_name, lang=lang)
+    print(corpus[0])
+    print(queries[0])
