@@ -44,7 +44,7 @@ def create_binary_relevance_map_arcchallenge(qrels, split="test"):
             qrels_dict[q] = c
     return qrels_dict
 
-def download_arcchallenge_from_hub():
+def download_arcchallenge_from_hub(**kwargs):
     report("Downloading ARCChallenge from the hf-hub")
     split_to_select = "test"   # this is the only choice
     # download all 3 files for retrieval
@@ -56,7 +56,7 @@ def download_arcchallenge_from_hub():
            queries[split_to_select], \
            qrels[split_to_select].rename_column("query-id","query_id").rename_column("corpus-id", "corpus_id")
 
-def download_arcchallenge(split_to_select="test", downsample=False):
+def download_arcchallenge(split_to_select="test", downsample=False, **kwargs):
     report(f"Downloading ARCChallenge ({split_to_select}) from local")
     ds = datasets.load_from_disk(path_to_data+"arcchallenge")
     if downsample:
@@ -71,7 +71,7 @@ def download_arcchallenge(split_to_select="test", downsample=False):
 
 
 
-def download_tatoeba_from_hub(lang=None, split_to_select="test", downsample=False):
+def download_tatoeba_from_hub(lang=None, split_to_select="test", downsample=False,**kwargs):
     report(f"Downloading Tatoeba:{lang} ({split_to_select}) from hf-hub")
     assert lang is not None, f"{lang=} give a language"
     ds = datasets.load_dataset("mteb/tatoeba-bitext-mining", lang)
@@ -85,7 +85,7 @@ def download_tatoeba_from_hub(lang=None, split_to_select="test", downsample=Fals
     del ds
     return corpus, queries, qrels_map
 
-def download_tatoeba(lang=None, split_to_select="test", downsample=False):
+def download_tatoeba(lang=None, split_to_select="test", downsample=False,**kwargs):
     report(f"Downloading Tatoeba:{lang} ({split_to_select}) from local")
     lang_ = "en-" + lang.split("-")[0][:2]
     if lang_ == "en-bu":   # bad, i know
@@ -101,7 +101,7 @@ def download_tatoeba(lang=None, split_to_select="test", downsample=False):
     del ds
     return corpus, queries, qrels_map
 
-def download_webfaq(lang=None, split_to_select="test", downsample=False):
+def download_webfaq(lang=None, split_to_select="test", downsample=False,**kwargs):
     report(f"Downloading webfaq:{lang} ({split_to_select}) from local")
     ds = datasets.load_from_disk(f"{path_to_data}web-faq-bitext:{lang}")
     if downsample:
@@ -114,7 +114,7 @@ def download_webfaq(lang=None, split_to_select="test", downsample=False):
     del ds
     return corpus, queries, qrels_map
 
-def download_summeval(split_to_select = "test", downsample=False):
+def download_summeval(split_to_select = "test", downsample=False, **kwargs):
     report(f"Downloading summeval ({split_to_select}) from local")
     #'text','summary'
     ds = datasets.load_from_disk(path_to_data+"summeval-2")
@@ -128,12 +128,12 @@ def download_summeval(split_to_select = "test", downsample=False):
     del ds
     return corpus, queries, qrels_map
 
-def download_stsbench(split_to_select="test", downsample=False):
+def download_stsbench(**kwargs):
     print(f"Donwnloading mteb/stsbenchmark-sts ({split_to_select})")
     ds = datasets.load_dataset("mteb/stsbenchmark-sts")[split_to_select]
     return ds["sentence2"], ds["sentence1"], ds["score"]
 
-def download_redditclustering(split_to_select="test", downsample=False, subsplit=0):
+def download_redditclustering(split_to_select="test", subsplit=0, **kwargs):
     report(f"Downloading mteb/reddit-clustering ('test') with index {subsplit}")
     ds = datasets.load_dataset("mteb/reddit-clustering")["test"][subsplit]
     return ds["sentences"], None, ds["labels"]
