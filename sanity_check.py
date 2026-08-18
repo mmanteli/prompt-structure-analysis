@@ -1,5 +1,6 @@
 import datasets
 import numpy as np
+import torch
 
 def calculate_non_rank_metrics(found_ids, relevant_ids):
     """
@@ -122,6 +123,75 @@ def sanity_check_one_to_one_correspondence():
     return  targets, questions, unmatched_targets["text"]
 
 
+
+def sanity_check_clustering():
+    
+    corpus = ["text 1 in cluster a", "text 2 in cluster a", "text 3 in cluster a",
+              "text 1 in cluster b", "text 2 in cluster b",
+              "text 1 in cluster c", "text 2 in cluster c", "text 3 in cluster c",
+              "text 1 in cluster d"]
+    labels = np.array(["a","a","a","b","b","c","c","c", "d"])
+    embeddings_q = torch.tensor([
+        [1,0,0], [0.99, 0, 0.01], [1.01, 0.001, 0],
+        [0,-1,0], [0.01, -1, 0.01],
+        [0,0,1], [0.01, 0, 1], [0, 0.001, 0.99],
+        [-1, -0.99, -0.99]
+    ])
+    
+    
+    
+    # calculate metrics per prompt
+    results = {}
+    for i, p in enumerate(["prompt"]):
+        # apply template and embed the prompt+query
+        #prompts_and_corpus = [get_detailed_instruct(p, c, template=template) for c in corpus]
+        # sanity check printout: see that template is filled correctly
+        #print(f"Example of what is embedded:\n----\n{prompts_and_corpus[0]}\n----\n")  
+        embeddings_pq = embeddings_q + np.random.random(embeddings_q.shape)*0.001
+        # now, we construct the anchor point, which functions as the answer now
+        cluster_centers = {}
+        for l in np.unique(labels):
+            print(labels)
+            print(l)
+            associated_indices = np.where(labels == l)[0]
+            print(associated_indices)
+            embeddings_in_this_cluster = [e for e in embeddings_pq[associated_indices]]
+            print(embeddings_in_this_cluster)
+            cluster_centers[l] = torch.mean(torch.stack(embeddings_in_this_cluster), axis = 0)
+        embeddings_a = torch.stack([cluster_centers[l] for l in labels])
+        example_cluster_locations = {l:np.where(labels==l)[0][0] for l in labels }
+
+        # Now, everything works as before
+        print(torch.round(embeddings_a, decimals=2))
+        print(example_cluster_locations)
+        
+        # negatives for metrics 6 & 7: other cluster centers
+        N = embeddings_q.shape[0]
+        k_hard = 2
+        hard_neg_indices = []
+        for i in range(N):
+            current_cluster = labels[i]
+            current_embedding = embeddings_q[i]
+            print(f"{current_cluster=}, {current_embedding=} ")
+            other_cluster_embeddings = np.array([cluster_centers[l] for l in example_cluster_locations.keys() if l!=current_cluster])
+            associated_cluster_labels = np.array([l for l in example_cluster_locations.keys() if l!=current_cluster])
+            print(f"{associated_cluster_labels=} {other_cluster_embeddings=}, \n this should not contain {current_cluster=} {example_cluster_locations[current_cluster]}")
+            
+            # find the closest incorrect clusters
+            cluster_sims = current_embedding@other_cluster_embeddings.T
+            print(f"{cluster_sims=}")
+            print(f"{torch.argsort(cluster_sims)}")
+            print(f"{torch.argsort(cluster_sims, descending=True)}")
+            cluster_ids = torch.argsort(cluster_sims, descending=True)[:k_hard]
+            asoc_labels = associated_cluster_labels[cluster_ids]
+            # then just find any index in embeddings a where these cluster centers are located
+            # does not matter which, because the comparison is simply to the embeddings
+            ids_to_mark_as_negatives = [example_cluster_locations[l] for l in asoc_labels]
+            print(f"For {current_cluster=}, mark {ids_to_mark_as_negatives=}")
+            hard_neg_indices.append(ids_to_mark_as_negatives)
+        print(hard_neg_indices)
+
 if __name__=="__main__":
     #sanity_check_logic(k=3)
-    sanity_check_one_to_one_correspondence()
+    #sanity_check_one_to_one_correspondence()
+    sanity_check_clustering()
