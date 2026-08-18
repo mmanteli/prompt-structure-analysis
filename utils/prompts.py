@@ -255,11 +255,103 @@ def get_prompts_webfaq(lang=None):
     ]
 
 
+def get_prompts_sts():
+    return [
+        # Good, on-task prompts (varying length)
+        "Represent this sentence for measuring semantic similarity with another sentence.",
+        "Encode this sentence so that sentences with similar meanings are mapped to nearby points in the embedding space.",
+        "Generate a representation of the following sentence that captures its core meaning for comparison with other sentences.",
+        "Represent this sentence such that its similarity to other sentences can be assessed on a continuous scale from unrelated to equivalent.",
+        "Embed the following sentence for the task of determining how closely it paraphrases another sentence.",
+        "Retrieve semantically similar sentences.",
+        "Represent this text for evaluating the degree of semantic equivalence between sentence pairs.",
+        "Given the following sentence, produce an embedding useful for comparing meaning across sentences.",
+        "Classify how similar the meaning of this sentence is to another sentence.",
+        "Represent this sentence for a natural language understanding task.",
+
+        # Slightly off or vague prompts
+        "Find documents related to the topic",
+        "Retrieve a similar passage",
+        "Search for related information",
+        "Look up the answer",
+        "Find something useful",
+        "Get the relevant text",
+        "Retrieve",
+
+        # Wrong task prompts
+        "Translate the following sentence into French",
+        "Summarize the given paragraph into two sentences",
+        "Classify the sentiment of the given review as positive or negative",
+        "Generate a creative story based on the prompt",
+        "Retrieve duplicate questions from the forum",
+        "Find the most similar product review",
+        "Given a code snippet, retrieve the documentation",
+
+        # Nonsense / keysmash prompts
+        "asdfjkl qpwoeiru zxcvbnm",
+        "hgJKSbf oiawnef LKJHDS kdjfbs",
+        "!!!! ??? ### @@@",
+]
+
+
+def get_prompts_redditclustering():
+    return [
+        "Identify the main topic of this text for grouping similar documents together.",
+        "Represent this sentence for clustering with other semantically similar sentences.",
+        "Summarize the core theme of the following passage so it can be grouped with related texts.",
+        "Generate an embedding of this document that captures its primary subject for clustering purposes.",
+        "What category or theme does this text belong to?",
+        "Classify the following text into a meaningful cluster based on its content.",
+        "Represent this paragraph in a way that highlights its topical similarity to other paragraphs.",
+        "Determine the underlying subject matter of this text for organizing it alongside similar content.",
+        "Embed this text so that documents discussing the same topic are placed near each other.",
+        "Extract the key concept from this text to facilitate grouping it with thematically related documents.",
+        
+        # Slightly off or vague prompts
+        "Find documents related to the topic",
+        "Retrieve a similar passage",
+        "Search for related information",
+        "Look up the answer",
+        "Find something useful",
+        "Get the relevant text",
+        "Retrieve",
+
+        # Wrong task prompts
+        "Translate the following sentence into French",
+        "Summarize the given paragraph into two sentences",
+        "Classify the sentiment of the given review as positive or negative",
+        "Generate a creative story based on the prompt",
+        "Retrieve duplicate questions from the forum",
+        "Find the most similar product review",
+        "Given a code snippet, retrieve the documentation",
+
+        # Nonsense / keysmash prompts
+        "asdfjkl qpwoeiru zxcvbnm",
+        "hgJKSbf oiawnef LKJHDS kdjfbs",
+        "!!!! ??? ### @@@",
+        ]
+
+def get_prompts(data_name, **kwargs):
+    if "arcchallenge" in data_name.lower():
+        return get_prompts_arcchallenge()
+    if "tatoeba" in data_name.lower():
+        return get_prompts_tatoeba(**kwargs)
+    if "reddit" in data_name.lower():
+        return get_prompts_redditclustering()
+    if "webfaq" in data_name.lower():
+        return get_prompts_webfaq(**kwargs)
+    if "summeval" in data_name.lower():
+        return get_prompts_summeval()
+    if "sts" in data_name.lower():
+        return get_prompts_sts()
+    raise NotImplementedError(f"Prompts for {data_name} not implemented or cannot resolve data name")
 
 def get_detailed_instruct(prompt, query, template="Instruct-Query"):
     """Given prompt, query, and template, return a filled template"""
     if prompt == "NO_PROMPT":
+        # for "NO_PROMPT" return only the query (a baseline for metrics)
         return query
+    # for "EMPTY" return empty template (baseline for including the word "Instruct")
     if template == "simple":
         return f"{prompt if prompt != 'EMPTY' else ''}. {query}"
     if template == "Instruct-Query":
