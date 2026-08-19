@@ -128,7 +128,7 @@ def download_summeval(split_to_select = "test", downsample=False, **kwargs):
     del ds
     return corpus, queries, qrels_map
 
-def download_stsbench(**kwargs):
+def download_stsbench(split_to_select="test", **kwargs):
     print(f"Donwnloading mteb/stsbenchmark-sts ({split_to_select})")
     ds = datasets.load_dataset("mteb/stsbenchmark-sts")[split_to_select]
     return ds["sentence2"], ds["sentence1"], ds["score"]

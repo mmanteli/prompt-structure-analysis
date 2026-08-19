@@ -105,11 +105,11 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
     
     
     # calculate metrics per prompt
+    # clustering script is slower because
+    # 1. we need to embed everything each time
+    # 2. we need to calculate cluster centers
     results = {}
-    for i, p in enumerate(prompts):
-        report("OK SANITY TIME")
-        report(f"{embeddings_q.shape=}")
-        report(f"{len(labels)=}")
+    for prompt_num, p in enumerate(prompts):
         # apply template and embed the prompt+query
         prompts_and_corpus = [get_detailed_instruct(p, c, template=template) for c in corpus]
         # sanity check printout: see that template is filled correctly
@@ -118,18 +118,25 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
         # now, we construct the anchor point, which functions as the answer now
         cluster_centers = {}
         for l in np.unique(labels):
+            # find the embeddings of cluster members
             associated_indices = np.where(np.array(labels) == l)[0]
-            #print(f"{len(associated_indices)=}")
+            # get the cluster center as their mean
             embeddings_in_this_cluster = [e for e in embeddings_pq[associated_indices]]
-            #print(f"{len(embeddings_in_this_cluster)=}, {embeddings_in_this_cluster[0].shape=}")
-            #print(f"Stacked {torch.stack(embeddings_in_this_cluster).shape}")
             cluster_centers[l] = torch.mean(torch.stack(embeddings_in_this_cluster), axis=0)
-            #print(f"Shape of cluster centers = {cluster_centers[l].shape}")
-        embeddings_a = torch.stack([cluster_centers[l] for l in labels])
+        embeddings_a = torch.stack([cluster_centers[l] for l in labels], axis=0)
         # we will need this later: ids that contain the cluster centers
-        # these could also be the last, random, as long as they map each to a different one
+        # these could also be the first, last, random, as long as they map each to a different one
         # and with correct label <= this is because the function is index based
         example_cluster_locations = {l:np.where(np.array(labels)==l)[0][0] for l in labels }
+        # then: to avoid recalculation, also get the embeddings for each non-correct cluster
+        # find the clusters that the current is NOT in
+        other_cluster_embeddings_dict = {}
+        associated_cluster_labels_dict = {}
+        for current_cluster in example_cluster_locations.keys():
+            # embeddings
+            other_cluster_embeddings_dict[current_cluster] = torch.stack([cluster_centers[l] for l in example_cluster_locations.keys() if l!=current_cluster], axis=0)
+            # and their labels
+            associated_cluster_labels_dict[current_cluster] = np.array([l for l in example_cluster_locations.keys() if l!=current_cluster])
 
         # Now, everything works as before, except the hard negs, 
         # which should be the closest false cluster centers
@@ -149,10 +156,9 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
             # for each query, get it's embedding and label
             current_cluster = labels[i]
             current_embedding = embeddings_q[i]
-            # find the clusters that the current is NOT in
-            other_cluster_embeddings = torch.stack([cluster_centers[l] for l in example_cluster_locations.keys() if l!=current_cluster], axis=0)
-            # and their labels
-            associated_cluster_labels = np.array([l for l in example_cluster_locations.keys() if l!=current_cluster])
+            # get the values we calculated already
+            other_cluster_embeddings = other_cluster_embeddings_dict[current_cluster]
+            associated_cluster_labels = associated_cluster_labels_dict[current_cluster]
             # find the closest incorrect clusters (and their labels)
             cluster_sims = current_embedding@other_cluster_embeddings.T
             cluster_ids = torch.argsort(cluster_sims, descending=True)[:k_hard]
@@ -246,7 +252,7 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
                     "q25": float(np.percentile(arr, 25)),
                     "q75": float(np.percentile(arr, 75))}
 
-        results[f"prompt{i}"] = {
+        results[f"prompt{prompt_num}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
             "example_text": prompts_and_corpus[0],              # example text as a sanity check
             "chord_similarity":     stats(chord_sim),           # angulation (same as par. fraction)
@@ -294,6 +300,7 @@ if __name__=="__main__":
     data_safe_name = options.data_name.replace("/","__")
     specific_prompts = "_specific_prompts" if options.use_lang_specific_prompts else ""
     save_path = f"{options.save_prefix}/{model_name_safe}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
+    print(f"Saving to {save_path}")
     os.makedirs(save_path, exist_ok=True)
     with open(f'{save_path}/prompt_geometry.json', 'w') as f:
         json.dump(results, f, indent=2)

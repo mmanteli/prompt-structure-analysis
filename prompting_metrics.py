@@ -221,7 +221,7 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
     
     # calculate metrics per prompt
     results = {}
-    for i, p in enumerate(prompts):
+    for prompt_num, p in enumerate(prompts):
         # apply template and embed the prompt+query
         prompts_and_queries = [get_detailed_instruct(p, q, template=template) for q in queries]
         # sanity check printout: see that template is filled correctly
@@ -310,7 +310,7 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
                     "q25": float(np.percentile(arr, 25)),
                     "q75": float(np.percentile(arr, 75))}
 
-        results[f"prompt{i}"] = {
+        results[f"prompt{prompt_num}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
             "example_text": prompts_and_queries[0],             # example text as a sanity check
             "chord_similarity":     stats(chord_sim),           # angulation (same as par. fraction)

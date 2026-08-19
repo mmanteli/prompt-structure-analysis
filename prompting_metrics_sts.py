@@ -150,7 +150,7 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
     
     # calculate metrics per prompt
     results = {}
-    for i, p in enumerate(prompts):
+    for prompt_num, p in enumerate(prompts):
         # apply template and embed the prompt+query
         prompts_and_queries = [get_detailed_instruct(p, q, template=template) for q in queries]
         # sanity check printout: see that template is filled correctly
@@ -243,7 +243,7 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         # works specifically well for the angles (bad angle that should be bad == good angle)
         # similarly for displacement, arguably for knn
         #scores = torch.tensor(scores).to(model.device)
-        results[f"prompt{i}"] = {
+        results[f"prompt{prompt_num}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
             "example_text": prompts_and_queries[0],             # example text as a sanity check
             "chord_similarity":     stats(np.array(chord_sim.cpu())*scores),           # angulation (same as par. fraction)
