@@ -10,7 +10,8 @@ import random
 from evaluate_prompts import find_relevant_doc_id
 from scipy.spatial.distance import pdist, squareform
 from utils.dataset_handling import download_dataset
-from utils.prompts import get_prompts_arcchallenge, get_prompts_summeval, get_prompts_tatoeba, get_prompts_webfaq, get_detailed_instruct
+from utils.prompts import get_prompts, get_detailed_instruct
+from prompting_metrics import pairwise_distances, knn_overlap_score
 # this contains simply lists and dictionaries that help select the correct prompts
 
 cos = torch.nn.CosineSimilarity()
@@ -47,97 +48,8 @@ def report(msg):
     # for quick flushing
     print(f'{msg}', flush=True)
 
-def load_dataset(path):
-    if os.path.exists(path):
-        return datasets.load_from_disk(path)
-    return datasets.load_dataset(path)
 
 
-def unit_test():
-    """Function to test the angulation similarity measures."""
-    # check that multidim calculations work, i.e. dimensions match
-    Q = torch.Tensor([[1.,0.,0.], [0.5,0.,0.], [0.,2.,2.]])
-    A = torch.Tensor([[1.,1.,0.], [0.,0.,1.], [0.,1.,1.]])
-    # Q1->A1: 45 degree, should be 0.7071
-    # Q2->A2: 90 degree, should be 0
-    # Q3->A3: same direction, should be 1
-    for i, j in zip(cos(Q,A), torch.tensor([0.7071, 0.0, 1.0])):
-        assert np.isclose(i,j, atol=1e-4), f"Test 1 not passed, {i}, {j}"
-    # subtracting query --> measuring angle wrt. vector A-Q, not wrt. origin
-    # i.e. see the angle of Q->P compared to Q->A
-    Q = torch.Tensor([[2.,4.], [2.,4.], [-4.,2.]])
-    A = torch.Tensor([[6.,4.], [6.,4.], [-2.,4.]])
-    P = torch.Tensor([[4.,5.], [2.,2.],[-4.,3.]])
-    A__Q = A-Q
-    P__Q = P-Q
-    # A__Q1 & P__Q1: 2/np.sqrt(5) = 0.89442
-    # A__Q2 & P__Q2: 90 degrees, so should be 0
-    # A__Q3 & P__Q3: 45 degrees, from triangle = adj/hypot = (np.sqrt(2)/2)/1 = 1/ np.sqrt(2) = 0.7071
-    for i,j in zip(cos(A__Q, P__Q), torch.Tensor([0.8944, 0.0, 0.7071])):
-        assert np.isclose(i,j, atol=1e-4), f"Test 2 not passed, {i}-{j}"
-    print("Success: All tests passed.")
-
-def _as_2d_float(a):
-    a = np.asarray(a, dtype=np.float64)
-    if a.ndim != 2:
-        raise ValueError(f"Expected 2D array, got shape {a.shape}")
-    return a
-
-def pairwise_distances(X, metric="cosine"):
-    """Make a pairwise distance matrix for input X"""
-    X = _as_2d_float(X)
-    return squareform(pdist(X, metric=metric))
-
-def knn_indices_from_distance_matrix(D, k:int):
-    """
-    Return indices of k nearest neighbors for each row i, excluding self.
-    D: NxN pairwise distances.
-    Output: Nxk integer array of indices.
-    """
-    D = np.asarray(D)
-    N = D.shape[0]
-    if D.shape != (N, N):
-        raise ValueError("D must be sqaure")
-    if not (1 <= k <= N - 1):
-        raise ValueError(f"k value must be in [1, {N-1}], got {k}")
-    idx = np.argsort(D, axis=1)
-    # exclude self -> d(self, self) == 0, always the first index
-    idx = idx[:, 1:k+1]
-    return idx
-
-def _jaccard_overlap(a, b):
-    """Jaccard overlap for two 1D integer arrays (as sets)."""
-    sa = set(map(int, a))
-    sb = set(map(int, b))
-    inter = len(sa & sb)
-    union = len(sa | sb)
-    return inter / union if union else 1.0  # return 1 for no sets -> will not happen if k>0
-
-
-def knn_overlap_score(X, Y, k=10, metric="cosine", mode= "jaccard"):
-    """
-    Calculate the average neighborhood preservation score, 0 to 1
-      - "recall": |N_k^X(i) ∩ N_k^Y(i)| / k
-      - "jaccard": Jaccard(N_k^X(i), N_k^Y(i))
-    This function does not return the mean but individual values.
-    """
-    assert mode in ["recall", "jaccard"], f"Mode needs to be recall or jaccard, now {mode}"
-    assert X.shape[0] == Y.shape[0], f"X and Y must have the same number of instances, X.shape={X.shape}, Y.shape={Y.shape}"
-
-    DX = pairwise_distances(X, metric=metric)
-    DY = pairwise_distances(Y, metric=metric)
-
-    NX = knn_indices_from_distance_matrix(DX, k)
-    NY = knn_indices_from_distance_matrix(DY, k)
-
-    if mode == "recall":
-        scores = []
-        for i in range(X.shape[0]):
-            scores.append(len(set(NX[i]) & set(NY[i])) / k)
-        return scores   # MEAN removed here, see stats()
-
-    else:
-        return [_jaccard_overlap(NX[i], NY[i]) for i in range(X.shape[0])]   # MEAN removed here, see stats()
 
 
 def create_one_to_one_correspondence(corpus, queries, qrels):
@@ -195,6 +107,9 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
     # calculate metrics per prompt
     results = {}
     for i, p in enumerate(prompts):
+        report("OK SANITY TIME")
+        report(f"{embeddings_q.shape=}")
+        report(f"{len(labels)=}")
         # apply template and embed the prompt+query
         prompts_and_corpus = [get_detailed_instruct(p, c, template=template) for c in corpus]
         # sanity check printout: see that template is filled correctly
@@ -204,13 +119,17 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
         cluster_centers = {}
         for l in np.unique(labels):
             associated_indices = np.where(np.array(labels) == l)[0]
+            #print(f"{len(associated_indices)=}")
             embeddings_in_this_cluster = [e for e in embeddings_pq[associated_indices]]
-            cluster_centers[l] = torch.mean(torch.stack(embeddings_in_this_cluster))
+            #print(f"{len(embeddings_in_this_cluster)=}, {embeddings_in_this_cluster[0].shape=}")
+            #print(f"Stacked {torch.stack(embeddings_in_this_cluster).shape}")
+            cluster_centers[l] = torch.mean(torch.stack(embeddings_in_this_cluster), axis=0)
+            #print(f"Shape of cluster centers = {cluster_centers[l].shape}")
         embeddings_a = torch.stack([cluster_centers[l] for l in labels])
         # we will need this later: ids that contain the cluster centers
         # these could also be the last, random, as long as they map each to a different one
-        # and with correct label
-        example_cluster_locations = {l:np.where(labels==l)[0][0] for l in labels }
+        # and with correct label <= this is because the function is index based
+        example_cluster_locations = {l:np.where(np.array(labels)==l)[0][0] for l in labels }
 
         # Now, everything works as before, except the hard negs, 
         # which should be the closest false cluster centers
@@ -231,13 +150,13 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
             current_cluster = labels[i]
             current_embedding = embeddings_q[i]
             # find the clusters that the current is NOT in
-            other_cluster_embeddings = np.array([cluster_centers[l] for l in example_cluster_locations.keys() if l!=current_cluster])
+            other_cluster_embeddings = torch.stack([cluster_centers[l] for l in example_cluster_locations.keys() if l!=current_cluster], axis=0)
             # and their labels
             associated_cluster_labels = np.array([l for l in example_cluster_locations.keys() if l!=current_cluster])
             # find the closest incorrect clusters (and their labels)
             cluster_sims = current_embedding@other_cluster_embeddings.T
             cluster_ids = torch.argsort(cluster_sims, descending=True)[:k_hard]
-            asoc_labels = associated_cluster_labels[cluster_ids]
+            asoc_labels = associated_cluster_labels[np.array(cluster_ids.cpu())]
             # then just use the dictionary of locations where this clusters embedding is located
             # does not matter which, because the comparison is simply to the embeddings
             ids_to_mark_as_negatives = [example_cluster_locations[l] for l in asoc_labels]
@@ -281,6 +200,7 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
 
         # ---- Metric 5: knn retention ----
         # "Does adding prompt make the query side structure resemble the answer side"
+        # knn is NOT applicable to clustering, but let's calculate it anyway
         knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu(), k=k)
 
         # ---- Metric 6: displacement vs. wrong answers ----
@@ -290,7 +210,8 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
         # Negative = prompt moved query away from hard negatives (desirable).
         # so, add multiplication by -1 
         # now positive = desirable
-        sim_pq_all = torch.mm(embeddings_pq, torch.concat((embeddings_a, embeddings_wa)).T)
+        sim_q_all = torch.mm(embeddings_q, embeddings_a.T)
+        sim_pq_all = torch.mm(embeddings_pq, embeddings_a.T)
         hard_neg_sim_change = -1*torch.tensor([
             (sim_pq_all[i, hard_neg_indices[i]]
             - sim_q_all[i, hard_neg_indices[i]]).mean().item()
@@ -304,7 +225,7 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
         # Positive = prompt pushes toward hard negatives (undesirable).
         # Negative = prompt pushes away from hard negatives (desirable).
         # so again, multiply by -1
-        all_embeddings = torch.cat((embeddings_a, embeddings_wa))  # (N+M, D)
+        all_embeddings = embeddings_a
         hard_neg_angulation = -1 * torch.tensor([
             cos(
                 delta_pq[i].unsqueeze(0).expand(k_hard, -1),    # (k_hard, D)
@@ -327,7 +248,7 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
 
         results[f"prompt{i}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
-            "example_text": prompts_and_queries[0],             # example text as a sanity check
+            "example_text": prompts_and_corpus[0],              # example text as a sanity check
             "chord_similarity":     stats(chord_sim),           # angulation (same as par. fraction)
             "sim_q_a":              stats(sim_qa),              # baseline similarity
             "sim_pq_a":             stats(sim_pqa),             # prompted similarity
@@ -350,11 +271,13 @@ if __name__=="__main__":
     options = parser.parse_args()
     # dowload dataset and preprocess
     lang = None # initialize
-    corpus, _, qrels = download_dataset(options.data_name, options.split)
+    # clustering/classification does not have queries: we construct separately
+    corpus, _, labels = download_dataset(options.data_name, split_to_select=options.split, downsample=options.num_examples)
     prompts = get_prompts(options.data_name)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
     report(corpus[0])
+    report(labels[0])
     # add a few prompts based on the template (function as baselines)
     if options.template != "simple":
         # These map to NO_PROMPT=vanilla query and EMPTY: misfilled template
@@ -363,8 +286,9 @@ if __name__=="__main__":
         # For the simple template, only vanilla query
         prompts = ["NO_PROMPT"] + prompts
 
-    print(f"Sanity check\n{questions[0]=}\n{targets[0]}")
-    results = calculate_metrics_for_clustering(options.model_name, questions, targets, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size)
+    print(f"Sanity check\n{corpus[0]=}\n{labels[0]}")
+    # this time, no need to create correspondence
+    results = calculate_metrics_for_clustering(options.model_name, corpus, labels, prompts, options.template, k = options.k, batch_size=options.batch_size)
     
     model_name_safe = options.model_name.replace("/", "__")
     data_safe_name = options.data_name.replace("/","__")
