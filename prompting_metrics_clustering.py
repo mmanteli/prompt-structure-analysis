@@ -81,196 +81,204 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
     unmatched_targets = corpus.filter(lambda example: example["_id"] not in found_ids)
     return  targets, questions, unmatched_targets["text"]
 
-
+def stats(t):
+    """Extract summary statistics"""
+    if isinstance(t, torch.Tensor):
+        arr = t.detach().cpu().numpy().reshape(-1)
+    else:
+        arr = t
+    return {"mean": float(np.mean(arr)),
+            "std": float(np.std(arr)),
+            "median": float(np.median(arr)),
+            "q25": float(np.percentile(arr, 25)),
+            "q75": float(np.percentile(arr, 75))}
 
 
 def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, template, k=10, batch_size=8):
     """
     model_name: path or huggingface alias
-    corpus: texts to be embedded (with prompts)
-    labels: cluster ids for each text
-        NOTE: queries and corpus need to have 1 to 1 correspondence, i.e. no qrels here
+    corpus: texts (all function as both query and corpus in clustering)
+    labels: cluster id for each text
     prompts: prompts to iterate over
-    wrong_answers: "leftovers" from corpus, texts that do not correpond to a query. These
-        will be added in the "negative" metrics
-    k = number of neighbors considered. for kNN, it is on the query and target side (1 to 1)
-        while in the negative metrics, it is on the target side
+    template: prompting template
+    k: neighborhood size
     """
-    # load the model
     model = SentenceTransformer(model_name, trust_remote_code=True)
     print("Model loaded.")
-    # embed the corpus (here it functions as the vanilla query)
+
+    # For clustering, we are using cluster centers as embeddings_a
+    # to avoid recalculation as much as possible, construct label to id mappings
+    labels_arr = np.array(labels)
+    unique_labels = np.unique(labels_arr)
+    N = len(corpus)
+    C = len(unique_labels)
+    label_to_center_idx = {l: i for i, l in enumerate(unique_labels)}
+
+    # Check that we have at least 2 examples per cluster
+    # otherwise, we'd be comparing one point against itself
+    cluster_sizes = {l: int(np.sum(labels_arr == l)) for l in unique_labels}
+    for l, size_ in cluster_sizes.items():
+        assert size_ > 1, f"Cluster {l} has only 1 member — leave-one-out is undefined"
+
+    # Embed unprompted texts: the baseline
     embeddings_q = model.encode(corpus, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
-    
-    
-    
-    # calculate metrics per prompt
-    # clustering script is slower because
-    # 1. we need to embed everything each time
-    # 2. we need to calculate cluster centers
+
+    # Calculate unprompted cluster centers, keep them as a single matrix
+    # and set them also as pairs (like in other tasks)
+    # we use these also for hard neg selection for metrics 6 and 7
+    baseline_centers = {
+        l: torch.mean(embeddings_q[np.where(labels_arr == l)[0]], dim=0)
+        for l in unique_labels
+    }
+    baseline_center_matrix = torch.stack([baseline_centers[l] for l in unique_labels])
+    # we can use the id mapping to access this while keeping it as one tensor
+    # now create the embeddings_a (fixed anchor) from these: simply assign values so that
+    # they correspond to each embeddings_q
+    embeddings_a_fixed = torch.stack([baseline_centers[l] for l in labels_arr])
+
+    # for each query, calculate vector to un prompted correct cluster center and similarity to it
+    #delta_a_fixed = embeddings_a_fixed - embeddings_q   # we do not need this actually
+    sim_qa_fixed  = cos(embeddings_q, embeddings_a_fixed)
+
+    # Okay, but now each text is contained in it's own cluster center
+    # introduces bias in metrics other than 6 & 7
+    # we need to drop the text itself from the cluster
+    # very simply: calculate the mean==center of the whole cluster
+    baseline_cluster_sums = {
+            l: embeddings_q[np.where(labels_arr == l)[0]].sum(dim=0)
+            for l in unique_labels
+        }
+    # and then substract the individual query embedding and normalize with |cluster|-1 to get the mean 
+    # unlike with embeddings_a_fixed, each query will now have different cluster center
+    # than others, because it will be omitted from it's own cluster
+    # we actually measure if the prompt moved the text towards others in the same cluster
+    embeddings_a_fixed_loo = torch.stack([
+            (baseline_cluster_sums[labels_arr[i]] - embeddings_q[i])
+            / (cluster_sizes[labels_arr[i]] - 1)
+            for i in range(N)
+        ])
+    # again, calculate the similarity
+    sim_qa_loo = cos(embeddings_q, embeddings_a_fixed_loo)
+
+    # Select hard negatives for 6 & 7, the most likely clusters to be mistakenly put to
+    # "Which other cluster centers are most confusable before prompting?""
+    # here we can use the baseline_center_matrix instead of embeddings_a
+    # simpler calculation
+    k_hard = min(k, C - 1)
+    sim_q_baseline = torch.mm(embeddings_q, baseline_center_matrix.T)
+    hard_neg_cluster_idxs = []  # these will be used to select the rows to use in 6 &7
+    for i in range(N):
+        own_center_idx = label_to_center_idx[labels_arr[i]]
+        sims_i = sim_q_baseline[i].clone()
+        sims_i[own_center_idx] = -float('inf')  # mask own cluster (not a negative)
+        top_k = torch.topk(sims_i, k_hard).indices
+        hard_neg_cluster_idxs.append(top_k)
+
+    # Now, iterate over prompts and calculate ~fairly~ similarly
     results = {}
     for prompt_num, p in enumerate(prompts):
-        # apply template and embed the prompt+query
         prompts_and_corpus = [get_detailed_instruct(p, c, template=template) for c in corpus]
-        # sanity check printout: see that template is filled correctly
-        print(f"Example of what is embedded:\n----\n{prompts_and_corpus[0]}\n----\n")  
+        print(f"Example of what is embedded:\n----\n{prompts_and_corpus[0]}\n----\n")
         embeddings_pq = model.encode(prompts_and_corpus, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
-        # now, we construct the anchor point, which functions as the answer now
-        cluster_centers = {}
-        for l in np.unique(labels):
-            # find the embeddings of cluster members
-            associated_indices = np.where(np.array(labels) == l)[0]
-            # get the cluster center as their mean
-            embeddings_in_this_cluster = [e for e in embeddings_pq[associated_indices]]
-            cluster_centers[l] = torch.mean(torch.stack(embeddings_in_this_cluster), axis=0)
-        embeddings_a = torch.stack([cluster_centers[l] for l in labels], axis=0)
-        # we will need this later: ids that contain the cluster centers
-        # these could also be the first, last, random, as long as they map each to a different one
-        # and with correct label <= this is because the function is index based
-        example_cluster_locations = {l:np.where(np.array(labels)==l)[0][0] for l in labels }
-        # then: to avoid recalculation, also get the embeddings for each non-correct cluster
-        # find the clusters that the current is NOT in
-        other_cluster_embeddings_dict = {}
-        associated_cluster_labels_dict = {}
-        for current_cluster in example_cluster_locations.keys():
-            # embeddings
-            other_cluster_embeddings_dict[current_cluster] = torch.stack([cluster_centers[l] for l in example_cluster_locations.keys() if l!=current_cluster], axis=0)
-            # and their labels
-            associated_cluster_labels_dict[current_cluster] = np.array([l for l in example_cluster_locations.keys() if l!=current_cluster])
 
-        # Now, everything works as before, except the hard negs, 
-        # which should be the closest false cluster centers
+        # To get the cluster centers AFTER prompt has been added
+        # we need to again do leave-one-out
+        # because otherwise it is biased towards the correct answer
+        # same as above: calculate sums, subtract the text itself, divide by |cluster|-1
+        prompted_cluster_sums = {
+            l: embeddings_pq[np.where(labels_arr == l)[0]].sum(dim=0)
+            for l in unique_labels
+        }
+        embeddings_a_loo = torch.stack([
+            (prompted_cluster_sums[labels_arr[i]] - embeddings_pq[i])
+            / (cluster_sizes[labels_arr[i]] - 1)
+            for i in range(N)
+        ])
 
-        # calculate everything we can calculate without using the prompt
-        # chord vector from query to answer
-        delta_a = embeddings_a - embeddings_q  # (N, D)
-
-        # baseline: how similar are q and a without any prompt?
-        sim_qa = cos(embeddings_q, embeddings_a)  # (N,)
-
-        # negatives for metrics 6 & 7: other cluster centers
-        N = embeddings_q.shape[0]
-        k_hard = min(k, N - 1)
-        hard_neg_indices = []
-        for i in range(N):
-            # for each query, get it's embedding and label
-            current_cluster = labels[i]
-            current_embedding = embeddings_q[i]
-            # get the values we calculated already
-            other_cluster_embeddings = other_cluster_embeddings_dict[current_cluster]
-            associated_cluster_labels = associated_cluster_labels_dict[current_cluster]
-            # find the closest incorrect clusters (and their labels)
-            cluster_sims = current_embedding@other_cluster_embeddings.T
-            cluster_ids = torch.argsort(cluster_sims, descending=True)[:k_hard]
-            asoc_labels = associated_cluster_labels[np.array(cluster_ids.cpu())]
-            # then just use the dictionary of locations where this clusters embedding is located
-            # does not matter which, because the comparison is simply to the embeddings
-            ids_to_mark_as_negatives = [example_cluster_locations[l] for l in asoc_labels]
-            hard_neg_indices.append(ids_to_mark_as_negatives)
-        
-        # Chord vector from query to prompted query ( to compare with delta_a)
-        delta_pq = embeddings_pq - embeddings_q  # (N, D)
+        # Chord vector from unprompted to prompted embedding
+        delta_pq = embeddings_pq - embeddings_q
 
         # ---- Metric 1: Angulation toward answer ----
-        # cosine similarity between the two chord vectors
-        # "Does the prompt move the query in the same direction as the answer?"
-        chord_sim = cos(delta_a, delta_pq)  # (N,)
+        #  "Does the prompt move the text in the direction of prompted (likely more correct) cluster center?"
+        # -> we have to use embeddings_a_loo
+        delta_a_loo = embeddings_a_loo - embeddings_q
+        chord_sim = cos(delta_a_loo, delta_pq)
 
         # ---- Metric 2: Direct similarity improvement ----
-        # "Does adding the prompt make pq closer to a than q was?"
-        sim_pqa = cos(embeddings_pq, embeddings_a)  # (N,)
-        sim_improvement = sim_pqa - sim_qa           # (N,)
+        # "How much did similarity increase with the cluster center"
+        # both query and cluster center move with prompt
+        # for both, use loo version to avoid bias
+        sim_pqa_loo = cos(embeddings_pq, embeddings_a_loo)
+        sim_improvement = sim_pqa_loo - sim_qa_loo 
 
-        # ---- Metric 3: Direct distance ----
-        # "How far did the prompt move the query?"
-        displacement = torch.norm(delta_pq, dim=1)  # (N,)
+        # ---- Metric 3: Displacement ----
+        # "How much did the prompt move the query"
+        # simply just the norm of delta_pq = embeddings_pq - embeddings_q
+        # -> severity of the effect the prompt introduces
+        displacement = torch.linalg.norm(delta_pq, dim=1)
 
-        # ---- Metric 4: Parallel vs orthogonal decomposition ----
-        # Project delta_pq onto the direction of delta_a
-        # out of the total movement caused by the prompt,
-        # how much is *toward the answer* vs *sideways*?
-        delta_a_norm = delta_a / (torch.norm(delta_a, dim=1, keepdim=True) + 1e-10)
-        # 1e-10 here to avoid NaN --> has not other effect since norm is 0 <==> tensor is identically 0
-        parallel_magnitude = torch.sum(delta_pq * delta_a_norm, dim=1)      # (N,) signed scalar projection
+        # ---- Metric 4: Parallel vs. orthogonal decomposition ----
+        # "How much of the movement is towards the 'correct answer'?"
+        # we need to use embeddings_a_loo and delta_a_loo
+        delta_a_norm = delta_a_loo / (torch.linalg.norm(delta_a_loo, dim=1, keepdim=True) + 1e-10)
+        parallel_magnitude = torch.sum(delta_pq * delta_a_norm, dim=1)
         orthogonal_magnitude = torch.sqrt(
-            torch.clamp(torch.sum(delta_pq ** 2, dim=1) - parallel_magnitude ** 2, min=0.0),
-        )  # (N,), follows from pythagorean theorem
+            torch.clamp(torch.sum(delta_pq ** 2, dim=1) - parallel_magnitude ** 2, min=0.0)
+        ) 
+        parallel_fraction = parallel_magnitude / (displacement + 1e-10)
 
-        # Ratio: what fraction of the movement is toward the answer?
-        parallel_fraction = parallel_magnitude / (displacement + 1e-10)  # (N,), in [-1, 1]
+        # ---- Metric 5: kNN retention ----
+        # "Does prompting preserve the unprompted neighborhood structure?"
+        # this measures a different thing than for retrieval, but as there is no way to apply this in other ways
+        # this it the most natural extra question to ask
+        knn_retention = knn_overlap_score(
+            embeddings_pq.detach().cpu(),
+            embeddings_q.detach().cpu(),
+            k=min(k, N - 1)
+        )
 
-        # sanity check: parallel_fraction and chord_sim should equal (simply from pythagorean theorem)
-        #assert torch.allclose(parallel_fraction, chord_sim, atol=1e-4), \
-        #    f"Parallel fraction and chord sim do not match: {parallel_fraction} != {chord_sim}"
-        # assert removed since result analysis will handle it
-
-        # ---- Metric 5: knn retention ----
-        # "Does adding prompt make the query side structure resemble the answer side"
-        # knn is NOT applicable to clustering, but let's calculate it anyway
-        knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu(), k=k)
-
-        # ---- Metric 6: displacement vs. wrong answers ----
-        # "Does adding prompt take you away from incorrect answers?"
-        # For the k-hardest wrong answers (most similar to the unprompted query),
-        # measure how much their similarity changes after prompting.
-        # Negative = prompt moved query away from hard negatives (desirable).
-        # so, add multiplication by -1 
-        # now positive = desirable
-        sim_q_all = torch.mm(embeddings_q, embeddings_a.T)
-        sim_pq_all = torch.mm(embeddings_pq, embeddings_a.T)
-        hard_neg_sim_change = -1*torch.tensor([
-            (sim_pq_all[i, hard_neg_indices[i]]
-            - sim_q_all[i, hard_neg_indices[i]]).mean().item()
+        # ---- Metric 6: similarity change to hard negative clusters ----
+        # Here we use the fixed centers
+        # change reflects purely how the text moved, not how the centers moved.
+        sim_pq_baseline = torch.mm(embeddings_pq, baseline_center_matrix.T)
+        hard_neg_sim_change = -1 * torch.tensor([
+            (sim_pq_baseline[i, hard_neg_cluster_idxs[i]]
+             - sim_q_baseline[i, hard_neg_cluster_idxs[i]]).mean().item()
             for i in range(N)
-        ])  # (N,)
+        ])
 
-
-        # ---- Metric 7: angle between delta_pq and delta_(closest k wrong targets) ----
-        # For each query's k-nearest wrong answers, compute the chord vector
-        # from the query to that wrong answer, then measure cosine with delta_pq.
-        # Positive = prompt pushes toward hard negatives (undesirable).
-        # Negative = prompt pushes away from hard negatives (desirable).
-        # so again, multiply by -1
-        all_embeddings = embeddings_a
+        # ---- Metric 7: angle toward hard negative cluster centers ----
+        # Similarly here: use the fixed centers
         hard_neg_angulation = -1 * torch.tensor([
             cos(
-                delta_pq[i].unsqueeze(0).expand(k_hard, -1),    # (k_hard, D)
-                all_embeddings[hard_neg_indices[i]] - embeddings_q[i]  # (k_hard, D)
+                delta_pq[i].unsqueeze(0).expand(k_hard, -1),                        
+                baseline_center_matrix[hard_neg_cluster_idxs[i]] - embeddings_q[i]  
             ).mean().item()
             for i in range(N)
         ])
 
-        def stats(t):
-            """Extract summary statistics"""
-            if isinstance(t, torch.Tensor):
-                arr = t.detach().cpu().numpy().reshape(-1)
-            else:
-                arr = t
-            return {"mean": float(np.mean(arr)),
-                    "std": float(np.std(arr)),
-                    "median": float(np.median(arr)),
-                    "q25": float(np.percentile(arr, 25)),
-                    "q75": float(np.percentile(arr, 75))}
 
+        # NOTE: sim_qa_fixed and sim_qa_loo are computed from unprompted embeddings only
+        # identical always, but results are easier to read if we include them every time
         results[f"prompt{prompt_num}"] = {
-            "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
-            "example_text": prompts_and_corpus[0],              # example text as a sanity check
-            "chord_similarity":     stats(chord_sim),           # angulation (same as par. fraction)
-            "sim_q_a":              stats(sim_qa),              # baseline similarity
-            "sim_pq_a":             stats(sim_pqa),             # prompted similarity
-            "sim_improvement":      stats(sim_improvement),     # delta
-            "displacement":         stats(displacement),        # how far prompt moved q
-            "parallel_magnitude":   stats(parallel_magnitude),  # movement toward answer (signed)
-            "orthogonal_magnitude": stats(orthogonal_magnitude),# movement sideways
-            "parallel_fraction":    stats(parallel_fraction),   # fraction toward answer
-            "knn_retention":        stats(knn_retention),       # how much structure we gain
-            "hard_neg_sim_change":  stats(hard_neg_sim_change), # sim change to hard negatives
-            "hard_neg_angulation":  stats(hard_neg_angulation), # angle toward hard negatives
+            "prompt_text":          p if p != "" else "empty",
+            "example_text":         prompts_and_corpus[0],
+            "chord_similarity":     stats(chord_sim),
+            "sim_q_a_fixed":        stats(sim_qa_fixed),
+            "sim_q_a_loo":          stats(sim_qa_loo),
+            "sim_pq_a":             stats(sim_pqa_loo),
+            "sim_improvement":      stats(sim_improvement),
+            "displacement":         stats(displacement),
+            "parallel_magnitude":   stats(parallel_magnitude),
+            "orthogonal_magnitude": stats(orthogonal_magnitude),
+            "parallel_fraction":    stats(parallel_fraction),
+            "knn_retention":        stats(knn_retention),
+            "hard_neg_sim_change":  stats(hard_neg_sim_change),
+            "hard_neg_angulation":  stats(hard_neg_angulation),
         }
 
     return results
 
-    
 
 
 if __name__=="__main__":
@@ -294,6 +302,7 @@ if __name__=="__main__":
 
     print(f"Sanity check\n{corpus[0]=}\n{labels[0]}")
     # this time, no need to create correspondence
+    # all texts are queries, and cluster centers are answers
     results = calculate_metrics_for_clustering(options.model_name, corpus, labels, prompts, options.template, k = options.k, batch_size=options.batch_size)
     
     model_name_safe = options.model_name.replace("/", "__")

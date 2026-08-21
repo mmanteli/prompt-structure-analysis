@@ -38,8 +38,8 @@ parser.add_argument('--batch_size', type=int, default=16,
                     help="batch size for embedding")
 parser.add_argument('--num_examples', type=int|bool, default=5000,
                     help="For largest datasets, number of examples to downsample to, set to False for no downsampling")
-parser.add_argument('--embedding_prefix', type=str|bool, default=False,
-                    help="prefix to save embedings to, works similar to --save_prefix")
+#parser.add_argument('--embedding_prefix', type=str|bool, default=False,
+#                    help="prefix to save embedings to, works similar to --save_prefix")
 parser.add_argument('--save_prefix', type=str, default="results_metrics",
                     help="Saving path; model_name, data_name, prompt_type and k added in script")
 
@@ -47,11 +47,6 @@ parser.add_argument('--save_prefix', type=str, default="results_metrics",
 def report(msg):
     # for quick flushing
     print(f'{msg}', flush=True)
-
-def load_dataset(path):
-    if os.path.exists(path):
-        return datasets.load_from_disk(path)
-    return datasets.load_dataset(path)
 
 
 
@@ -62,8 +57,13 @@ def create_STS_correspondence(corpus, queries, qrels, minmax=None):
     minmax=(low, high) for range of scores, otherwise calculated from data
     """
     # check if we already have the structure we need, if so, only normalize the scores==qrels
+    # the download_dataset() can return these as already prepocessed
     if isinstance(qrels, list) and isinstance(corpus, list) and isinstance(queries, list) and len(corpus) == len(queries) == len(qrels):
-        max_score, min_score = np.max(qrels), np.min(qrels) if minmax is None else minmax
+        if minmax is None:
+            min_score, max_score = np.min(qrels), np.max(qrels)
+        else:
+            min_score, max_score = minmax
+        # normalize scores
         scores = np.array([2*(s-min_score)/(max_score-min_score)-1 for s in qrels])
         return corpus, queries, scores, None
     # otherwise, construct them
@@ -93,12 +93,25 @@ def create_STS_correspondence(corpus, queries, qrels, minmax=None):
     # if the result is relevant, we multiply all scores with 1
     # if non-relevant, we multiply with -1 
     # i.e. minmax normalize scores to -1 to 1
-    max_score, min_score = np.max(scores), np.min(scores) if minmax is None else minmax
+    if minmax is None:
+        min_score, max_score = np.min(scores), np.max(scores)
+    else:
+        min_score, max_score = minmax
     scores = np.array([2*(s-min_score)/(max_score-min_score)-1 for s in scores])
     # NOTE: this could also be a -1/1 mask based on the mean score..?
-    return  targets, questions, scores, unmatched_targets["text"]
+    return  targets, questions, scores, None if len(unmatched_targets["text"]) == 0 else unmatched_targets["text"]
 
-
+def stats(t):
+    """Extract summary statistics"""
+    if isinstance(t, torch.Tensor):
+        arr = t.detach().cpu().numpy().reshape(-1)
+    else:
+        arr = t
+    return {"mean": float(np.mean(arr)),
+            "std": float(np.std(arr)),
+            "median": float(np.median(arr)),
+            "q25": float(np.percentile(arr, 25)),
+            "q75": float(np.percentile(arr, 75))}
 
 
 def calculate_metrics(model_name, queries, answers, scores, prompts, template, wrong_answers=None, k=10, batch_size=8):
@@ -121,28 +134,33 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
     embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
     # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
     if wrong_answers:
+        # yes filler, so concatenate them at the end
         embeddings_wa = model.encode(wrong_answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
+        # for STS, we almost NEVER have these
     else:
-        embeddings_wa = torch.tensor([]).to(model.device)  # empty, has no effect on the calculation later
+        # no filler
+        embeddings_all_a = embeddings_a
 
     # calculate everything we can calculate without using the prompt
     # chord vector from query to answer
-    delta_a = embeddings_a - embeddings_q  # (N, D)
+    delta_a = embeddings_a - embeddings_q
 
     # baseline: how similar are q and a without any prompt?
-    sim_qa = cos(embeddings_q, embeddings_a)  # (N,)
+    sim_qa = cos(embeddings_q, embeddings_a)
 
     # negatives for metrics 6 & 7: here we can add the wrong answers (if they exist)
-    N = embeddings_q.shape[0]
-    k_hard = min(k, N - 1)
+    N_pool = embeddings_all_a.shape[0]
+    N_q = embeddings_q.shape[0]
+    k_hard = min(k, N_pool - 1)
     # add the filler
-    sim_q_all = torch.mm(embeddings_q, torch.concat((embeddings_a, embeddings_wa)).T)
+    sim_q_all = torch.mm(embeddings_q, embeddings_all_a.T)
     # For each query, find indices of k nearest *wrong* answers
     # since embeddings_q and embeddings_a are in order, and we just append embeddings_wa
     # we can still just mask the "diagonal" (i)
     # but then just search the larger area in torch.topk
     hard_neg_indices = []
-    for i in range(N):
+    for i in range(N_q):
         sims_i = sim_q_all[i].clone()
         # mask out the correct pair
         sims_i[i] = -float('inf')
@@ -158,32 +176,32 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
 
         # Chord vector from query to prompted query ( to compare with delta_a)
-        delta_pq = embeddings_pq - embeddings_q  # (N, D)
+        delta_pq = embeddings_pq - embeddings_q 
 
         # ---- Metric 1: Angulation toward answer ----
         # cosine similarity between the two chord vectors
         # "Does the prompt move the query in the same direction as the answer?"
-        chord_sim = cos(delta_a, delta_pq)  # (N,)
+        chord_sim = cos(delta_a, delta_pq) 
 
         # ---- Metric 2: Direct similarity improvement ----
         # "Does adding the prompt make pq closer to a than q was?"
-        sim_pqa = cos(embeddings_pq, embeddings_a)  # (N,)
-        sim_improvement = sim_pqa - sim_qa           # (N,)
+        sim_pqa = cos(embeddings_pq, embeddings_a)
+        sim_improvement = sim_pqa - sim_qa 
 
         # ---- Metric 3: Direct distance ----
         # "How far did the prompt move the query?"
-        displacement = torch.norm(delta_pq, dim=1)  # (N,)
+        displacement = torch.linalg.norm(delta_pq, dim=1)
 
         # ---- Metric 4: Parallel vs orthogonal decomposition ----
         # Project delta_pq onto the direction of delta_a
         # out of the total movement caused by the prompt,
         # how much is *toward the answer* vs *sideways*?
-        delta_a_norm = delta_a / (torch.norm(delta_a, dim=1, keepdim=True) + 1e-10)
+        delta_a_norm = delta_a / (torch.linalg.norm(delta_a, dim=1, keepdim=True) + 1e-10)
         # 1e-10 here to avoid NaN --> has not other effect since norm is 0 <==> tensor is identically 0
-        parallel_magnitude = torch.sum(delta_pq * delta_a_norm, dim=1)      # (N,) signed scalar projection
+        parallel_magnitude = torch.sum(delta_pq * delta_a_norm, dim=1)  #signed scalar projection
         orthogonal_magnitude = torch.sqrt(
             torch.clamp(torch.sum(delta_pq ** 2, dim=1) - parallel_magnitude ** 2, min=0.0),
-        )  # (N,), follows from pythagorean theorem
+        )  # follows from pythagorean theorem
 
         # Ratio: what fraction of the movement is toward the answer?
         parallel_fraction = parallel_magnitude / (displacement + 1e-10)  # (N,), in [-1, 1]
@@ -195,7 +213,12 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
 
         # ---- Metric 5: knn retention ----
         # "Does adding prompt make the query side structure resemble the answer side"
-        knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu(), k=k)
+        # not directly applicable for STS: select only the positive pairs
+        positive_mask = scores > 0
+        knn_retention = knn_overlap_score(embeddings_pq[positive_mask].detach().cpu(), 
+                                          embeddings_a[positive_mask].detach().cpu(), 
+                                          k=min(k, positive_mask.sum() - 1)
+                                          )
 
         # ---- Metric 6: displacement vs. wrong answers ----
         # "Does adding prompt take you away from incorrect answers?"
@@ -204,12 +227,12 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         # Negative = prompt moved query away from hard negatives (desirable).
         # so, add multiplication by -1 
         # now positive = desirable
-        sim_pq_all = torch.mm(embeddings_pq, torch.concat((embeddings_a, embeddings_wa)).T)
+        sim_pq_all = torch.mm(embeddings_pq, embeddings_all_a.T)
         hard_neg_sim_change = -1*torch.tensor([
             (sim_pq_all[i, hard_neg_indices[i]]
             - sim_q_all[i, hard_neg_indices[i]]).mean().item()
-            for i in range(N)
-        ])  # (N,)
+            for i in range(N_q)
+        ]) 
 
 
         # ---- Metric 7: angle between delta_pq and delta_(closest k wrong targets) ----
@@ -218,31 +241,24 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         # Positive = prompt pushes toward hard negatives (undesirable).
         # Negative = prompt pushes away from hard negatives (desirable).
         # so again, multiply by -1
-        all_embeddings = torch.cat((embeddings_a, embeddings_wa))  # (N+M, D)
+        all_embeddings = embeddings_all_a
         hard_neg_angulation = -1 * torch.tensor([
             cos(
                 delta_pq[i].unsqueeze(0).expand(k_hard, -1),    # (k_hard, D)
                 all_embeddings[hard_neg_indices[i]] - embeddings_q[i]  # (k_hard, D)
             ).mean().item()
-            for i in range(N)
+            for i in range(N_q)
         ])
 
-        def stats(t):
-            """Extract summary statistics"""
-            if isinstance(t, torch.Tensor):
-                arr = t.detach().cpu().numpy().reshape(-1)
-            else:
-                arr = t
-            return {"mean": float(np.mean(arr)),
-                    "std": float(np.std(arr)),
-                    "median": float(np.median(arr)),
-                    "q25": float(np.percentile(arr, 25)),
-                    "q75": float(np.percentile(arr, 75))}
 
-        # finally, the difference: weight the results with score
-        # works specifically well for the angles (bad angle that should be bad == good angle)
-        # similarly for displacement, arguably for knn
-        #scores = torch.tensor(scores).to(model.device)
+
+        # finally, the difference based on retrieval: weight the results with score
+        # e.g. we saw that similarity decreased with semantically non-related
+        # then that is good! so we multiply by a negative number
+        # works similartly for the angles (bad angle that should be bad == good angle)
+        # with some, this does not work
+        # for example displacement is always >0
+        # same for knn and the neg metrics which are not really applicable here
         results[f"prompt{prompt_num}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
             "example_text": prompts_and_queries[0],             # example text as a sanity check
@@ -250,13 +266,13 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
             "sim_q_a":              stats(np.array(sim_qa.cpu())*scores),              # baseline similarity
             "sim_pq_a":             stats(np.array(sim_pqa.cpu())*scores),             # prompted similarity
             "sim_improvement":      stats(np.array(sim_improvement.cpu())*scores),     # delta
-            "displacement":         stats(np.array(displacement.cpu())*scores),        # how far prompt moved q
+            "displacement":         stats(np.array(displacement.cpu())),                # how far prompt moved q
             "parallel_magnitude":   stats(np.array(parallel_magnitude.cpu())*scores),  # movement toward answer (signed)
-            "orthogonal_magnitude": stats(np.array(orthogonal_magnitude.cpu())*scores),# movement sideways
+            "orthogonal_magnitude": stats(np.array(orthogonal_magnitude.cpu())),        # movement sideways
             "parallel_fraction":    stats(np.array(parallel_fraction.cpu())*scores),   # fraction toward answer
-            "knn_retention":        stats(np.array(knn_retention)*scores),       # how much structure we gain
-            "hard_neg_sim_change":  stats(np.array(hard_neg_sim_change.cpu())*scores), # sim change to hard negatives
-            "hard_neg_angulation":  stats(np.array(hard_neg_angulation.cpu())*scores), # angle toward hard negatives
+            "knn_retention":        stats(np.array(knn_retention)),                      # how much structure we gain
+            "hard_neg_sim_change":  stats(np.array(hard_neg_sim_change.cpu())),     # sim change to hard negatives
+            "hard_neg_angulation":  stats(np.array(hard_neg_angulation.cpu())),     # angle toward hard negatives
         }
 
     return results
@@ -269,7 +285,18 @@ if __name__=="__main__":
     options = parser.parse_args()
     # dowload dataset and preprocess
     lang = None # initialize
-    corpus, queries, qrels = download_dataset(options.data_name, split_to_select=options.split)
+    # if lang is given with column notation
+    if ":" in options.data_name:
+        options.data_name, lang = options.data_name.split(":")
+    # download the dataset with data_name
+    # this returns queries and corpus, both datasets.Dataset, and 
+    # qrels which may be a datasets.Dataset or a dict{query_id:corpus_is}
+    # and specifically for STS datasets that sometimes do not have natural (corpus,query,qrel) structure in hfhub
+    # they can also be lists in some cases
+    # qrels in the case of STS datasets is the scores (e.g. 5 for semantically similar, 1 for not at all)
+    corpus, queries, qrels = download_dataset(options.data_name, lang=lang, split_to_select=options.split)
+    # download prompts
+    # this returns a list of possible instructions to use on the query side
     prompts = get_prompts(options.data_name)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
@@ -283,10 +310,17 @@ if __name__=="__main__":
         # For the simple template, only vanilla query
         prompts = ["NO_PROMPT"] + prompts
 
+    # preprocess the data
+    # create 1-to-1 correspondence (STS datasets already have this)
+    # and most importantly: normalize scores to -1 to 1
     targets, questions, scores, filler_targets = create_STS_correspondence(corpus, queries, qrels)
-    print(f"Sanity check\n{questions[0]=}\n{targets[0]}")
+    # filler targets is in almost ALL cases None here
+    print(f"Sanity check:  These should have score {scores[0]}:\n{questions[0]=}\n{targets[0]}")
+
+    # calculate results
     results = calculate_metrics(options.model_name, questions, targets, scores, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size)
     
+    # save results
     model_name_safe = options.model_name.replace("/", "__")
     data_safe_name = options.data_name.replace("/","__")
     specific_prompts = "_specific_prompts" if options.use_lang_specific_prompts else ""

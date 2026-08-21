@@ -47,11 +47,6 @@ def report(msg):
     # for quick flushing
     print(f'{msg}', flush=True)
 
-def load_dataset(path):
-    if os.path.exists(path):
-        return datasets.load_from_disk(path)
-    return datasets.load_dataset(path)
-
 
 def unit_test():
     """Function to test the angulation similarity measures."""
@@ -145,7 +140,7 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
     For each query, find the best match in the corpus.
     Return them in order, and additionally, return the 'unused'/'filler' corpus texts
     """
-    # if the dataset is already sorted in this way
+    # if the dataset is already sorted in this way (some dataset download scripts return this format)
     if len(corpus) == len(queries) and qrels == {k:k for k in range(len(queries))}:
         return corpus["text"], queries["text"], None
     questions = []
@@ -154,7 +149,6 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
     # loop over queries
     for line in queries:
         q_id, q_text = line["_id"], line["text"]
-        #print(f"Now in {q_id=}, {q_text=}")
         # find the relevant answers based on the query id
         # this funtion returns the best match at the top of the list
         relevant_ids, assoc_scores = find_relevant_doc_id(q_id, qrels)
@@ -170,19 +164,31 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
     return  targets, questions, unmatched_targets["text"]
 
 
+def stats(t):
+    """Extract summary statistics"""
+    if isinstance(t, torch.Tensor):
+        arr = t.detach().cpu().numpy().reshape(-1)
+    else:
+        arr = t
+    return {"mean": float(np.mean(arr)),
+            "std": float(np.std(arr)),
+            "median": float(np.median(arr)),
+            "q25": float(np.percentile(arr, 25)),
+            "q75": float(np.percentile(arr, 75))}
 
 
 def calculate_metrics(model_name, queries, answers, prompts, template, wrong_answers=None, k=10, batch_size=8):
     """
     model_name: path or huggingface alias
-    queries: datasets-object with columns "_id" and "text"
-    anwers: datasets-object with columns "_id" and "text"
+    queries: preprocessed queries
+    anwers: proprocessed corpus
         NOTE: queries and corpus need to have 1 to 1 correspondence, i.e. no qrels here
     prompts: prompts to iterate over
     wrong_answers: "leftovers" from corpus, texts that do not correpond to a query. These
         will be added in the "negative" metrics
     k = number of neighbors considered. for kNN, it is on the query and target side (1 to 1)
         while in the negative metrics, it is on the target side
+    batch_size= batch size for embedding
     """
     # load the model
     model = SentenceTransformer(model_name, trust_remote_code=True)
@@ -191,29 +197,34 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
     embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
     embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
     # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
+    # and create a "all" embeddings variable: used in the negative metrics
     if wrong_answers:
+        # yes filler, so concatenate them at the end
         embeddings_wa = model.encode(wrong_answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
     else:
-        embeddings_wa = torch.tensor([]).to(model.device)  # empty, has no effect on the calculation later
+        # no filler
+        embeddings_all_a = embeddings_a
 
     # calculate everything we can calculate without using the prompt
     # chord vector from query to answer
-    delta_a = embeddings_a - embeddings_q  # (N, D)
+    delta_a = embeddings_a - embeddings_q 
 
     # baseline: how similar are q and a without any prompt?
-    sim_qa = cos(embeddings_q, embeddings_a)  # (N,)
+    sim_qa = cos(embeddings_q, embeddings_a)
 
-    # negatives for metrics 6 & 7: here we can add the wrong answers (if they exist)
-    N = embeddings_q.shape[0]
-    k_hard = min(k, N - 1)
+    # negatives for metrics 6 & 7: here we can use the "wrong" answers (if they exist)
+    N_pool = embeddings_all_a.shape[0]
+    N_q = embeddings_q.shape[0]
+    k_hard = min(k, N_pool - 1)
     # add the filler
-    sim_q_all = torch.mm(embeddings_q, torch.concat((embeddings_a, embeddings_wa)).T)
+    sim_q_all = torch.mm(embeddings_q, embeddings_all_a.T)  # here we use embeddings_all_a
     # For each query, find indices of k nearest *wrong* answers
     # since embeddings_q and embeddings_a are in order, and we just append embeddings_wa
     # we can still just mask the "diagonal" (i)
     # but then just search the larger area in torch.topk
     hard_neg_indices = []
-    for i in range(N):
+    for i in range(N_q):
         sims_i = sim_q_all[i].clone()
         # mask out the correct pair
         sims_i[i] = -float('inf')
@@ -229,32 +240,32 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
         embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
 
         # Chord vector from query to prompted query ( to compare with delta_a)
-        delta_pq = embeddings_pq - embeddings_q  # (N, D)
+        delta_pq = embeddings_pq - embeddings_q
 
         # ---- Metric 1: Angulation toward answer ----
         # cosine similarity between the two chord vectors
         # "Does the prompt move the query in the same direction as the answer?"
-        chord_sim = cos(delta_a, delta_pq)  # (N,)
+        chord_sim = cos(delta_a, delta_pq)
 
         # ---- Metric 2: Direct similarity improvement ----
         # "Does adding the prompt make pq closer to a than q was?"
-        sim_pqa = cos(embeddings_pq, embeddings_a)  # (N,)
-        sim_improvement = sim_pqa - sim_qa           # (N,)
+        sim_pqa = cos(embeddings_pq, embeddings_a)
+        sim_improvement = sim_pqa - sim_qa
 
         # ---- Metric 3: Direct distance ----
         # "How far did the prompt move the query?"
-        displacement = torch.norm(delta_pq, dim=1)  # (N,)
+        displacement = torch.linalg.norm(delta_pq, dim=1)
 
         # ---- Metric 4: Parallel vs orthogonal decomposition ----
         # Project delta_pq onto the direction of delta_a
         # out of the total movement caused by the prompt,
         # how much is *toward the answer* vs *sideways*?
-        delta_a_norm = delta_a / (torch.norm(delta_a, dim=1, keepdim=True) + 1e-10)
+        delta_a_norm = delta_a / (torch.linalg.norm(delta_a, dim=1, keepdim=True) + 1e-10)
         # 1e-10 here to avoid NaN --> has not other effect since norm is 0 <==> tensor is identically 0
-        parallel_magnitude = torch.sum(delta_pq * delta_a_norm, dim=1)      # (N,) signed scalar projection
+        parallel_magnitude = torch.sum(delta_pq * delta_a_norm, dim=1)      # signed scalar projection
         orthogonal_magnitude = torch.sqrt(
             torch.clamp(torch.sum(delta_pq ** 2, dim=1) - parallel_magnitude ** 2, min=0.0),
-        )  # (N,), follows from pythagorean theorem
+        )  # follows from pythagorean theorem
 
         # Ratio: what fraction of the movement is toward the answer?
         parallel_fraction = parallel_magnitude / (displacement + 1e-10)  # (N,), in [-1, 1]
@@ -262,11 +273,11 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
         # sanity check: parallel_fraction and chord_sim should equal (simply from pythagorean theorem)
         #assert torch.allclose(parallel_fraction, chord_sim, atol=1e-4), \
         #    f"Parallel fraction and chord sim do not match: {parallel_fraction} != {chord_sim}"
-        # assert removed since result analysis will handle it
+        # assert removed since this has float-accuraty issues, and result analysis will handle it anyway
 
         # ---- Metric 5: knn retention ----
         # "Does adding prompt make the query side structure resemble the answer side"
-        knn_retention = knn_overlap_score(embeddings_pq.cpu(), embeddings_a.cpu(), k=k)
+        knn_retention = knn_overlap_score(embeddings_pq.detach().cpu(), embeddings_a.detach().cpu(), k=k)
 
         # ---- Metric 6: displacement vs. wrong answers ----
         # "Does adding prompt take you away from incorrect answers?"
@@ -275,12 +286,12 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
         # Negative = prompt moved query away from hard negatives (desirable).
         # so, add multiplication by -1 
         # now positive = desirable
-        sim_pq_all = torch.mm(embeddings_pq, torch.concat((embeddings_a, embeddings_wa)).T)
+        sim_pq_all = torch.mm(embeddings_pq, embeddings_all_a.T)
         hard_neg_sim_change = -1*torch.tensor([
             (sim_pq_all[i, hard_neg_indices[i]]
             - sim_q_all[i, hard_neg_indices[i]]).mean().item()
-            for i in range(N)
-        ])  # (N,)
+            for i in range(N_q)
+        ])
 
 
         # ---- Metric 7: angle between delta_pq and delta_(closest k wrong targets) ----
@@ -289,26 +300,15 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
         # Positive = prompt pushes toward hard negatives (undesirable).
         # Negative = prompt pushes away from hard negatives (desirable).
         # so again, multiply by -1
-        all_embeddings = torch.cat((embeddings_a, embeddings_wa))  # (N+M, D)
+        all_embeddings = embeddings_all_a  # (N+M, D)
         hard_neg_angulation = -1 * torch.tensor([
             cos(
                 delta_pq[i].unsqueeze(0).expand(k_hard, -1),    # (k_hard, D)
                 all_embeddings[hard_neg_indices[i]] - embeddings_q[i]  # (k_hard, D)
             ).mean().item()
-            for i in range(N)
+            for i in range(N_q)
         ])
 
-        def stats(t):
-            """Extract summary statistics"""
-            if isinstance(t, torch.Tensor):
-                arr = t.detach().cpu().numpy().reshape(-1)
-            else:
-                arr = t
-            return {"mean": float(np.mean(arr)),
-                    "std": float(np.std(arr)),
-                    "median": float(np.median(arr)),
-                    "q25": float(np.percentile(arr, 25)),
-                    "q75": float(np.percentile(arr, 75))}
 
         results[f"prompt{prompt_num}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
@@ -339,7 +339,12 @@ if __name__=="__main__":
     if ":" in options.data_name:
         options.data_name, lang = options.data_name.split(":")
 
+    # download the dataset with data_name
+    # this returns queries and corpus, both datasets.Dataset, and 
+    # qrels which may be a datasets.Dataset or a dict{query_id:corpus_is}
     corpus, queries, qrels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
+    # download prompts
+    # this returns a list of possible instructions to use on the query side
     prompts = get_prompts(options.data_name, lang=lang)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
@@ -353,10 +358,17 @@ if __name__=="__main__":
         # For the simple template, only vanilla query
         prompts = ["NO_PROMPT"] + prompts
 
+    # preprocess the data
+    # create 1-to-1 correspondence (i.e. sort by qrels)
+    # and return "filler targets" == texts in corpus that do not correspond to a query
+    # naming of questions, targets to not confuse with the unprocessed corpus and queries
     targets, questions, filler_targets = create_one_to_one_correspondence(corpus, queries, qrels)
-    print(f"Sanity check\n{questions[0]=}\n{targets[0]}")
+    print(f"Sanity check: These should be a pair:\n{questions[0]=}\n{targets[0]}")
+    
+    # calculate the metrics
     results = calculate_metrics(options.model_name, questions, targets, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size)
     
+    # save the results
     model_name_safe = options.model_name.replace("/", "__")
     data_safe_name = options.data_name.replace("/","__")
     specific_prompts = "_specific_prompts" if options.use_lang_specific_prompts else ""
