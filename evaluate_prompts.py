@@ -373,9 +373,10 @@ if __name__=="__main__":
 
     # create full saving paths
     model_name_ = options.model_name.replace("/","__")
+    data_safe_name = options.data_name.replace("/","__")
     # only set this if the prefix was given
-    options.embeddings = "" if not options.embedding_prefix else f'{options.embedding_prefix}/{model_name_}/{options.data_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_embeddings.pkl'
-    options.save_path =  f'{options.save_prefix}/{model_name_}/{options.data_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/results@{options.k}.json'
+    options.embeddings = "" if not options.embedding_prefix else f'{options.embedding_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_embeddings.pkl'
+    options.save_path =  f'{options.save_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/results@{options.k}.json'
     
     if options.embeddings != "" and os.path.exists(options.embeddings):
         # we have precalculated embeddings
@@ -385,3 +386,4 @@ if __name__=="__main__":
         # calculate everything from scratch
         report("Calculating embeddings and score")
         embed_and_calculate_scores(options, prompts, corpus, queries, qrels)
+
