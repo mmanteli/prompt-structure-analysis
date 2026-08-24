@@ -157,8 +157,8 @@ def embed_and_calculate_cluster_scores(options, dataset_specific_prompts, corpus
     corpus_embeddings = [None]*len(labels) #model.encode(corpus, normalize_embeddings=True, batch_size=options.batch_size)
     if options.embeddings:
         os.makedirs(os.path.dirname(options.embeddings), exist_ok=True)
-        write_embeddings(file=options.embeddings, key="labels", data=labels, embeddings=[None]*len(labels))
-        write_embeddings(file=options.embeddings, key="corpus", data=corpus, embeddings=corpus_embeddings)
+        write_embeddings(file=options.embeddings, key="labels", data={"label":labels}, embeddings=[None]*len(labels))
+        write_embeddings(file=options.embeddings, key="corpus", data={"text": corpus}, embeddings=corpus_embeddings)
 
     # loop over prompts
     results = {}
@@ -170,7 +170,7 @@ def embed_and_calculate_cluster_scores(options, dataset_specific_prompts, corpus
             # construct a new dict here
             write_embeddings(file=options.embeddings, 
                              key=p, 
-                             data=prompted_texts, 
+                             data={"text": prompted_texts}, 
                              embeddings=prompted_embeddings)
         report(f"----\nNow in prompt {i}, example: \n{prompted_texts[0]}")
         results[f"prompt{i}"] = {**{"prompt_text": p}, **calculate_scores(prompted_embeddings, labels)}
@@ -191,11 +191,10 @@ def read_embeddings_and_calculate_cluster_scores(options, dataset_specific_promp
         # First 2 saved values are qrels and corpus embeddings
         # check that they match, and set corpus_embeddings
         if data["key"] == "labels":
-            # qrels is saved in "text_ids"
-            assert data["data"] == labels, "Mismatch between qrels and precalculated embeddings"
+            assert data["data"]["label"] == labels, "Mismatch between labels and reading precalculated embeddings"
             continue
         if data["key"] == "corpus":
-            assert data["data"] == corpus, "Mismatch between loaded corpus and precalculated embeddings"
+            assert data["data"]["text"] == corpus, "Mismatch between loaded corpus and precalculated embeddings"
             # set corpus embeddings
             corpus_embeddings = data["data"]["embeddings"]
             continue
@@ -204,9 +203,9 @@ def read_embeddings_and_calculate_cluster_scores(options, dataset_specific_promp
         report(f"In prompt {prompt}")
         prompted_embeddings = data["data"]["embeddings"]
         # check that prompt order is the same --> we can save with the same prompt order
-        assert get_detailed_instruct(prompt, corpus[0], template=options.template) == data["data"][0], \
-            f'{get_detailed_instruct(prompt, corpus[0], template=options.template) != data["data"][0]}'
-        results[f"prompt{i}"] = {**{"prompt_text": p}, **calculate_scores(prompted_embeddings, labels)}
+        assert get_detailed_instruct(prompt, corpus[0], template=options.template) == data["data"]["text"][0], \
+            f'{get_detailed_instruct(prompt, corpus[0], template=options.template) != data["data"]["text"][0]}'
+        results[f"prompt{i}"] = {**{"prompt_text": prompt}, **calculate_scores(prompted_embeddings, labels)}
         i += 1
 
     os.makedirs(os.path.dirname(options.save_path), exist_ok=True)
@@ -239,6 +238,8 @@ if __name__=="__main__":
     # create full saving paths
     model_name_ = options.model_name.replace("/","__")
     data_safe_name = options.data_name.replace("/","__")
+    if lang is not None:
+        data_safe_name += f":{lang}"
     # only set this if the prefix was given
     options.embeddings = "" if not options.embedding_prefix else f'{options.embedding_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_embeddings.pkl'
     options.save_path =  f'{options.save_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/results@{options.k}.json'

@@ -75,7 +75,6 @@ def write_embeddings(file, key, data, embeddings):
     append_pkl({"key":key, "data": d}, file)
 
 
-
 def apply_template(prompt, query, template="Instruct-Query"):
     return get_detailed_instruct(prompt, query, template=template)
 
@@ -129,8 +128,8 @@ def embed_and_calculate_STS_scores(options, dataset_specific_prompts, corpus, qu
     corpus_embeddings = model.encode(corpus, normalize_embeddings=True, batch_size=options.batch_size)
     if options.embeddings:
         os.makedirs(os.path.dirname(options.embeddings), exist_ok=True)
-        write_embeddings(file=options.embeddings, key="scores", data=scores, embeddings=None)
-        write_embeddings(file=options.embeddings, key="corpus", data=corpus, embeddings=corpus_embeddings)
+        write_embeddings(file=options.embeddings, key="scores", data={"scores":scores}, embeddings=[None]*len(scores))
+        write_embeddings(file=options.embeddings, key="corpus", data={"text":corpus}, embeddings=corpus_embeddings)
 
     # loop over prompts
     results = {}
@@ -159,12 +158,12 @@ def read_embeddings_and_calculate_STS_scores(options, dataset_specific_prompts, 
     for data in yield_from_pkl(options.embeddings):
         # First 2 saved values are qrels and corpus embeddings
         # check that they match, and set corpus_embeddings
-        if data["key"] == "labels":
+        if data["key"] == "scores":
             # qrels is saved in "text_ids"
-            assert data["data"] == scores, "Mismatch between qrels and precalculated embeddings"
+            assert data["data"]["scores"] == scores, "Mismatch between scores and reading precalculated embeddings"
             continue
         if data["key"] == "corpus":
-            assert data["data"] == corpus, "Mismatch between loaded corpus and precalculated embeddings"
+            assert data["data"]["text"] == corpus, "Mismatch between loaded corpus and precalculated embeddings"
             # set corpus embeddings
             corpus_embeddings = data["data"]["embeddings"]
             continue
@@ -173,8 +172,8 @@ def read_embeddings_and_calculate_STS_scores(options, dataset_specific_prompts, 
         report(f"In prompt {prompt}")
         query_embeddings = data["data"]["embeddings"]
         # check that prompt order is the same --> we can save with the same prompt order
-        assert get_detailed_instruct(prompt, queries[0]["text"], template=options.template) == data["data"]["text"][0], \
-            f'{get_detailed_instruct(prompt, queries[0]["text"], template=options.template)} != {data["data"]["text"][0]}'
+        assert get_detailed_instruct(prompt, queries[0], template=options.template) == data["data"]["text"][0], \
+            f'{get_detailed_instruct(prompt, queries[0], template=options.template)} != {data["data"]["text"][0]}'
         results[f"prompt{i}"] = {**{"prompt_text": prompt}, **calculate_scores(options.k, scores, corpus_embeddings, query_embeddings)}
         i += 1
 
@@ -209,6 +208,8 @@ if __name__=="__main__":
     # create full saving paths
     model_name_ = options.model_name.replace("/","__")
     data_safe_name = options.data_name.replace("/","__")
+    if lang is not None:
+        data_safe_name += f":{lang}"
     # only set this if the prefix was given
     options.embeddings = "" if not options.embedding_prefix else f'{options.embedding_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_embeddings.pkl'
     options.save_path =  f'{options.save_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/results@{options.k}.json'

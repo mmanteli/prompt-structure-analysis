@@ -323,7 +323,6 @@ def read_embeddings_and_calculate_scores(options, dataset_specific_prompts, corp
         if data["key"] == "qrels":
             # qrels is saved in "text_ids"
             if isinstance(qrels, dict):
-                print(data["data"])
                 assert data["data"] == qrels, "Mismatch between qrels and precalculated embeddings"
             else:
                 assert data["data"] == qrels.to_dict(), "Mismatch between qrels and precalculated embeddings"
@@ -374,6 +373,8 @@ if __name__=="__main__":
     # create full saving paths
     model_name_ = options.model_name.replace("/","__")
     data_safe_name = options.data_name.replace("/","__")
+    if lang is not None:
+        data_safe_name += f":{lang}"
     # only set this if the prefix was given
     options.embeddings = "" if not options.embedding_prefix else f'{options.embedding_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_embeddings.pkl'
     options.save_path =  f'{options.save_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/results@{options.k}.json'
