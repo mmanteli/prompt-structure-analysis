@@ -15,7 +15,7 @@ wait_for_space() {
 }
 
 # datasets that are NOT language-specific (skip --use_lang_specific_prompts)
-NON_LANG_DATASETS=("arcchallenge" "summeval-2")
+NON_LANG_DATASETS=("mteb/ARCChallenge" "summeval-2")
 
 is_lang_specific_data() {
     local d="$1"
@@ -30,25 +30,23 @@ k=10
 MODELS=(
     "BAAI/bge-m3"
     "Qwen/Qwen3-Embedding-0.6B"
-    "intfloat/multilingual-e5-small"
     "intfloat/multilingual-e5-large-instruct"
-    "minishlab/potion-base-8M"
+    #"nvidia/llama-embed-nemotron-8b"
+    "microsoft/harrier-oss-v1-0.6b"
+    #"nvidia/NV-Embed-v2"
     "google/embeddinggemma-300m"
 )
 
 DATASETS=(
-    "arcchallenge"
-    "summeval-2"
-    "tatoeba:fin-eng"
-    "tatoeba:fra-eng"
-    "tatoeba:bul-eng"
-    "webfaq:deu"
+    "mteb/ARCChallenge"
+    "mteb/tatoeba-bitext-mining:fin-eng"
+    "mteb/tatoeba-bitext-mining:fra-eng"
     "webfaq:eng"
-    "webfaq:zho"
+    "webfaq:deu"
 )
 
-for split in fit; do
-    for template in "Instruct-Query" "simple"; do
+for split in test; do
+    for template in "Instruct-Query"; do
         for model in "${MODELS[@]}"; do
             # sanitise model and dataset names for job names / log files
             safe_model="${model//\//_}"
@@ -63,11 +61,12 @@ for split in fit; do
                     --split="$split" \
                     --template="$template"\
                     --batch_size=8 \
-                    --save_prefix="prompt_eval")
+                    --save_prefix="prompt_eval_results")
 
                 wait_for_space
+                #echo "eval_${safe_model}_${safe_data}_${split}_${template}"
                 sbatch --job-name="eval_${safe_model}_${safe_data}_${split}_${template}" \
-                       -t 00:59:59 \
+                       -t 02:59:59 \
                        slurm_run_command_gpu.sh "${CMD[@]}"
 
                 if is_lang_specific_data "$data"; then
@@ -77,13 +76,14 @@ for split in fit; do
                         --model_name="$model" \
                         --split="$split" \
                         --template="$template" \
-                        --save_prefix="prompt_eval" \
+                        --save_prefix="prompt_eval_results" \
                         --batch_size=8 \
                         --use_lang_specific_prompts)
 
                     wait_for_space
+                    echo "eval_${safe_model}_${safe_data}_LANG_SPECIFIC_${split}_${template}"
                     sbatch --job-name="eval_${safe_model}_${safe_data}_${split}_${template}_lang_specific" \
-                           -t 00:49:59 \
+                           -t 02:59:59 \
                            slurm_run_command_gpu.sh "${CMD[@]}"
                 fi
             done
