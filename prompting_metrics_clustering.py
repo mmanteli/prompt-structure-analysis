@@ -94,7 +94,7 @@ def stats(t):
             "q75": float(np.percentile(arr, 75))}
 
 
-def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, template, k=10, batch_size=8):
+def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, template, k=10, batch_size=8, embeddings=None):
     """
     model_name: path or huggingface alias
     corpus: texts (all function as both query and corpus in clustering)
@@ -303,12 +303,20 @@ if __name__=="__main__":
     print(f"Sanity check\n{corpus[0]=}\n{labels[0]}")
     # this time, no need to create correspondence
     # all texts are queries, and cluster centers are answers
-    results = calculate_metrics_for_clustering(options.model_name, corpus, labels, prompts, options.template, k = options.k, batch_size=options.batch_size)
-    
-    model_name_safe = options.model_name.replace("/", "__")
+    model_safe_name = options.model_name.replace("/", "__")
     data_safe_name = options.data_name.replace("/","__")
-    specific_prompts = "_specific_prompts" if options.use_lang_specific_prompts else ""
-    save_path = f"{options.save_prefix}/{model_name_safe}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
+    if lang is not None:
+        data_safe_name += f":{lang}"
+    specific_prompts = "_lang_specific" if options.use_lang_specific_prompts else ""
+    save_path = f"{options.save_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
+    embeddings_path = None
+    if options.embedding_prefix:
+        embeddings_path = f"{options.embedding_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_embeddings.pkl"
+        os.makedirs(os.path.dirname(embeddings_path), exist_ok=True)
+    # calculate results
+    results = calculate_metrics_for_clustering(options.model_name, corpus, labels, prompts, options.template, k = options.k, batch_size=options.batch_size, embeddings=embeddings_path)
+    
+    
     print(f"Saving to {save_path}")
     os.makedirs(save_path, exist_ok=True)
     with open(f'{save_path}/prompt_geometry.json', 'w') as f:
