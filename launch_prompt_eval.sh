@@ -28,7 +28,7 @@ is_lang_specific_data() {
 k=10
 
 MODELS=(
-    "BAAI/bge-m3"
+    #"BAAI/bge-m3"
     "Qwen/Qwen3-Embedding-0.6B"
     "intfloat/multilingual-e5-large-instruct"
     #"nvidia/llama-embed-nemotron-8b"
@@ -61,6 +61,7 @@ for split in test; do
                     --split="$split" \
                     --template="$template"\
                     --batch_size=8 \
+                    --embedding_prefix="embeddings_eval" \
                     --save_prefix="prompt_eval_results")
 
                 wait_for_space
@@ -77,6 +78,7 @@ for split in test; do
                         --split="$split" \
                         --template="$template" \
                         --save_prefix="prompt_eval_results" \
+                        --embedding_prefix="embeddings_eval" \
                         --batch_size=8 \
                         --use_lang_specific_prompts)
 

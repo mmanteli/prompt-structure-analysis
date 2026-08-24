@@ -15,7 +15,18 @@ wait_for_space() {
 }
 
 # datasets that are NOT language-specific (skip --use_lang_specific_prompts)
-NON_LANG_DATASETS=("arcchallenge" "summeval-2")
+NON_LANG_DATASETS=("mteb/ARCChallenge" "summeval-2")
+
+MODELS=(
+    #"BAAI/bge-m3"
+    "Qwen/Qwen3-Embedding-0.6B"
+    "intfloat/multilingual-e5-large-instruct"
+    #"nvidia/llama-embed-nemotron-8b"
+    "microsoft/harrier-oss-v1-0.6b"
+    #"nvidia/NV-Embed-v2"
+    "google/embeddinggemma-300m"
+)
+
 
 is_lang_specific_data() {
     local d="$1"
@@ -27,32 +38,36 @@ is_lang_specific_data() {
 
 # ── First: structural analysis ──────────────────────────────────────
 
-for dataset in "arcchallenge" "summeval-2" "webfaq:deu" "webfaq:eng" "webfaq:zho" "tatoeba:fin-eng" "tatoeba:fra-eng"; do   
-    for split in fit; do
-        for template in "Instruct-Query" "simple"; do
+for dataset in "mteb/ARCChallenge" "webfaq:eng" "webfaq:deu" "mteb/tatoeba-bitext-mining:fin-eng" "mteb/tatoeba-bitext-mining:fra-eng"; do   
+    for model in "${MODELS[@]}"; do
+        for template in "Instruct-Query"; do
             CMD=(python prompting_metrics.py \
+                --model=$model \
                 --data_name=$dataset \
-                --split="$split" \
+                --split="test" \
                 --template="$template" \
-                --save_prefix="prompt_metrics" \
+                --save_prefix="prompt_structure_results" \
+                --embedding_prefix="embeddings_struct" \
                 --batch_size=4)
 
             wait_for_space
-            echo "${dataset}:${split}_${template}"
-            sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}" -t 0:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            echo "${model}:${dataset}:${split}_${template}"
+            sbatch --job-name="prompt_metrics_${model}_${dataset}:${split}_${template}" -t 1:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
             
             if is_lang_specific_data $dataset; then
                 CMD=(python prompting_metrics.py \
-                    --split="$split" \
+                    --model=$model \
+                    --split="test" \
                     --data_name=$dataset \
                     --template="$template" \
-                    --save_prefix="prompt_metrics" \
+                    --save_prefix="prompt_structure_results" \
                     --batch_size=4 \
+                    --embedding_prefix="embeddings_struct" \
                     --use_lang_specific_prompts)
 
                 wait_for_space
-                echo "${dataset}:${split}_${template}_lang_specific"
-                sbatch --job-name="prompt_metrics_${dataset}:${split}_${template}_lang_specific" -t 0:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+                echo "${model}:${dataset}:${split}_${template}_lang_specific"
+                sbatch --job-name="prompt_metrics_${model}_${dataset}:${split}_${template}_lang_specific" -t 1:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
             fi
         done
     done
