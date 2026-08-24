@@ -7,7 +7,8 @@ import torch
 import jsonargparse
 import sys
 import random
-from evaluate_prompts import find_relevant_doc_id
+import pickle
+from evaluate_prompts import find_relevant_doc_id, write_embeddings
 from scipy.spatial.distance import pdist, squareform
 from utils.dataset_handling import download_dataset
 from utils.prompts import get_prompts, get_detailed_instruct
@@ -47,6 +48,22 @@ def report(msg):
     # for quick flushing
     print(f'{msg}', flush=True)
 
+
+def yield_from_pkl(path):
+    with open(path, "rb") as f:
+        while True:
+            try:
+                yield pickle.load(f)
+            except EOFError:
+                break
+# EXTREMELY INEFFICIENT; ONLY USE THIS IN TIME OF EXTREME NEED
+def read_from_pickle(filename, key_to_find):
+    for line_ in yield_from_pkl(filename):
+        if line_["key"] == key_to_find:
+            return line_
+    raise Exception(f"Could not locate the precalculated stuff with given key {key_to_find}")
+             
+        
 
 def unit_test():
     """Function to test the angulation similarity measures."""
@@ -177,7 +194,7 @@ def stats(t):
             "q75": float(np.percentile(arr, 75))}
 
 
-def calculate_metrics(model_name, queries, answers, prompts, template, wrong_answers=None, k=10, batch_size=8):
+def calculate_metrics(model_name, queries, answers, prompts, template, wrong_answers=None, k=10, batch_size=8, embeddings=None):
     """
     model_name: path or huggingface alias
     queries: preprocessed queries
@@ -190,21 +207,48 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
         while in the negative metrics, it is on the target side
     batch_size= batch size for embedding
     """
-    # load the model
-    model = SentenceTransformer(model_name, trust_remote_code=True)
-    print("Model loaded.")
-    # embed the "ground truth values": regular queries and targets
-    embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
-    embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
-    # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
-    # and create a "all" embeddings variable: used in the negative metrics
-    if wrong_answers:
-        # yes filler, so concatenate them at the end
-        embeddings_wa = model.encode(wrong_answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
-        embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
-    else:
-        # no filler
-        embeddings_all_a = embeddings_a
+    # load the model or precalculated results
+    calculate_embeddings = True
+    if embeddings is not None and os.path.exists(embeddings):
+        calculate_embeddings = False # we already have results
+    if calculate_embeddings:  
+        report("Downloading model...")
+        model = SentenceTransformer(model_name, trust_remote_code=True)
+        report("Model loaded.")
+        # embed the "ground truth values": regular queries and targets
+        embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        if embeddings:  # now we can still save the embeddings if we want to
+            report(f"Writing embeddings to {embeddings}")
+            write_embeddings(file=embeddings, key="corpus", data={"text":answers}, embeddings=embeddings_a)
+            write_embeddings(file=embeddings, key="queries", data={"text":queries}, embeddings=embeddings_q)
+        # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
+        # and create a "all" embeddings variable: used in the negative metrics
+        if wrong_answers:
+            # yes filler, so concatenate them at the end
+            embeddings_wa = model.encode(wrong_answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+            if embeddings:
+                write_embeddings(file=embeddings, key="wrong_answers", data={"text":wrong_answers}, embeddings=embeddings_wa)
+            embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
+        else:
+            # no filler
+            embeddings_all_a = embeddings_a
+    else:  # we read embeddings, not calculate them
+        print("Reading precalculated embeddings")
+        prec = read_from_pickle(embeddings, "corpus")
+        assert prec["data"]["text"][0] == answers[0], f'{prec["data"]["text"][0]}!={answers[0]}'# here sanity check
+        embeddings_a = prec["data"]["embeddings"]
+        prec = read_from_pickle(embeddings, "queries")
+        embeddings_q = prec["data"]["embeddings"]
+        if wrong_answers:
+            prec = read_from_pickle(embeddings, "wrong_answers")
+            embeddings_wa = prec["data"]["embeddings"]
+            embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
+        else:
+            # no filler
+            embeddings_all_a = embeddings_a
+
+
 
     # calculate everything we can calculate without using the prompt
     # chord vector from query to answer
@@ -236,8 +280,15 @@ def calculate_metrics(model_name, queries, answers, prompts, template, wrong_ans
         # apply template and embed the prompt+query
         prompts_and_queries = [get_detailed_instruct(p, q, template=template) for q in queries]
         # sanity check printout: see that template is filled correctly
-        print(f"Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")  
-        embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        print(f"Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")
+        if calculate_embeddings:
+            embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+            if embeddings:
+                write_embeddings(file=embeddings, key=p, data={"text": prompts_and_queries}, embeddings=embeddings_pq)
+        else:  # just read
+            prec = read_from_pickle(embeddings, p)
+            assert prec["data"]["text"] == prompts_and_queries, "mismatch between precalculated and dataset"
+            embeddings_pq = prec["data"]["embeddings"]
 
         # Chord vector from query to prompted query ( to compare with delta_a)
         delta_pq = embeddings_pq - embeddings_q
@@ -365,14 +416,21 @@ if __name__=="__main__":
     targets, questions, filler_targets = create_one_to_one_correspondence(corpus, queries, qrels)
     print(f"Sanity check: These should be a pair:\n{questions[0]=}\n{targets[0]}")
     
+    # save the results
+    model_safe_name = options.model_name.replace("/", "__")
+    data_safe_name = options.data_name.replace("/","__")
+    if lang is not None:
+        data_safe_name += f":{lang}"
+    specific_prompts = "_lang_specific" if options.use_lang_specific_prompts else ""
+    save_path = f"{options.save_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
+    embeddings_path = None
+    if options.embedding_prefix:
+        embeddings_path = f"{options.embedding_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_embeddings.pkl"
+        os.makedirs(os.path.dirname(embeddings_path), exist_ok=True)
     # calculate the metrics
-    results = calculate_metrics(options.model_name, questions, targets, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size)
+    results = calculate_metrics(options.model_name, questions, targets, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size, embeddings=embeddings_path)
     
     # save the results
-    model_name_safe = options.model_name.replace("/", "__")
-    data_safe_name = options.data_name.replace("/","__")
-    specific_prompts = "_specific_prompts" if options.use_lang_specific_prompts else ""
-    save_path = f"{options.save_prefix}/{model_name_safe}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
     os.makedirs(save_path, exist_ok=True)
     with open(f'{save_path}/prompt_geometry.json', 'w') as f:
         json.dump(results, f, indent=2)
