@@ -5,9 +5,10 @@ import json
 import numpy as np
 import torch
 import jsonargparse
+import pickle
 import sys
 import random
-from evaluate_prompts import find_relevant_doc_id
+from evaluate_prompts import find_relevant_doc_id, write_embeddings
 from scipy.spatial.distance import pdist, squareform
 from utils.dataset_handling import download_dataset
 from utils.prompts import get_prompts, get_detailed_instruct
@@ -49,7 +50,19 @@ def report(msg):
     print(f'{msg}', flush=True)
 
 
-
+def yield_from_pkl(path):
+    with open(path, "rb") as f:
+        while True:
+            try:
+                yield pickle.load(f)
+            except EOFError:
+                break
+# EXTREMELY INEFFICIENT; ONLY USE THIS IN TIME OF EXTREME NEED
+def read_from_pickle(filename, key_to_find):
+    for line_ in yield_from_pkl(filename):
+        if line_["key"] == key_to_find:
+            return line_
+    raise Exception(f"Could not locate the precalculated stuff with given key {key_to_find}")
 
 
 def create_one_to_one_correspondence(corpus, queries, qrels):
@@ -121,7 +134,23 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
         assert size_ > 1, f"Cluster {l} has only 1 member — leave-one-out is undefined"
 
     # Embed unprompted texts: the baseline
-    embeddings_q = model.encode(corpus, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+    # load the model or precalculated results
+    calculate_embeddings = True
+    if embeddings is not None and os.path.exists(embeddings):
+        calculate_embeddings = False # we already have results
+    if calculate_embeddings:
+        report("Calculating embeddings")
+        embeddings_q = model.encode(corpus, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        if embeddings:  # we want to still save
+            write_embeddings(file=embeddings, key="labels", data={"labels":labels}, embeddings=None)
+            write_embeddings(file=embeddings, key="full_text", data={"text":corpus}, embeddings=embeddings_q)
+    else:
+        print("Reading precalculated embeddings")
+        prec = read_from_pickle(embeddings, "labels")
+        assert prec["data"]["labels"] == labels, "Downloaded labels do not match the precalculated results"
+        prec = read_from_pickle(embeddings, "full_text")
+        assert prec["data"]["text"][0] == corpus[0], f'{prec["data"]["text"][0]}!={corpus[0]}'# here sanity check
+        embeddings_q = prec["data"]["embeddings"]
 
     # Calculate unprompted cluster centers, keep them as a single matrix
     # and set them also as pairs (like in other tasks)
@@ -179,7 +208,14 @@ def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, templa
     for prompt_num, p in enumerate(prompts):
         prompts_and_corpus = [get_detailed_instruct(p, c, template=template) for c in corpus]
         print(f"Example of what is embedded:\n----\n{prompts_and_corpus[0]}\n----\n")
-        embeddings_pq = model.encode(prompts_and_corpus, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        if calculate_embeddings:
+            embeddings_pq = model.encode(prompts_and_corpus, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+            if embeddings:
+                write_embeddings(file=embeddings, key=p, data={"text": prompts_and_corpus}, embeddings=embeddings_pq)
+        else:
+            prec = read_from_pickle(embeddings, p)
+            assert prec["data"]["text"] == prompts_and_corpus, "Downloaded prompt+texts do not match the precalculated results"
+            embeddings_pq = prec["data"]["embeddings"]
 
         # To get the cluster centers AFTER prompt has been added
         # we need to again do leave-one-out
