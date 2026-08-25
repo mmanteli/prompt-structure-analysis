@@ -357,7 +357,10 @@ if __name__=="__main__":
     if ":" in options.data_name:
         options.data_name, lang = options.data_name.split(":")
     corpus, queries, qrels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
-    prompts = get_prompts(options.data_name, lang=lang)
+    if options.use_lang_specific_prompts:
+        prompts = get_prompts(options.data_name, lang=lang)
+    else:
+        prompts =  get_prompts(options.data_name)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
     report(queries[0])

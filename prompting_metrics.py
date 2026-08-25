@@ -396,7 +396,10 @@ if __name__=="__main__":
     corpus, queries, qrels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
     # download prompts
     # this returns a list of possible instructions to use on the query side
-    prompts = get_prompts(options.data_name, lang=lang)
+    if options.use_lang_specific_prompts:
+        prompts = get_prompts(options.data_name, lang=lang)
+    else:
+        prompts =  get_prompts(options.data_name)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
     report(queries[0])

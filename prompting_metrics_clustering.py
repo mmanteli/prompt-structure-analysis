@@ -285,9 +285,15 @@ if __name__=="__main__":
     options = parser.parse_args()
     # dowload dataset and preprocess
     lang = None # initialize
+    # if lang is given with column notation
+    if ":" in options.data_name:
+        options.data_name, lang = options.data_name.split(":")
     # clustering/classification does not have queries: we construct separately
     corpus, _, labels = download_dataset(options.data_name, split_to_select=options.split, downsample=options.num_examples)
-    prompts = get_prompts(options.data_name)
+    if options.use_lang_specific_prompts:
+        prompts = get_prompts(options.data_name, lang=lang)
+    else:
+        prompts =  get_prompts(options.data_name)
     report("Sanity check: What was downloaded?")
     report(prompts[0])
     report(corpus[0])
