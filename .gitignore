@@ -6,7 +6,7 @@ old*
 prompt_eval*
 prompt_metrics*
 test*
-
+embeddings*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
