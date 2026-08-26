@@ -435,5 +435,6 @@ if __name__=="__main__":
     
     # save the results
     os.makedirs(save_path, exist_ok=True)
+    report(f"Saving to {save_path}")
     with open(f'{save_path}/prompt_geometry.json', 'w') as f:
         json.dump(results, f, indent=2)

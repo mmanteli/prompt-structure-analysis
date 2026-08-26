@@ -178,6 +178,7 @@ def read_embeddings_and_calculate_STS_scores(options, dataset_specific_prompts, 
         i += 1
 
     os.makedirs(os.path.dirname(options.save_path), exist_ok=True)
+    report(f"Saving to {options.save_path}")
     with open(options.save_path, 'w') as f:
         json.dump(results,f, indent=2)
 

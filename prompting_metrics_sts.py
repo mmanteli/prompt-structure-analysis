@@ -383,5 +383,6 @@ if __name__=="__main__":
     results = calculate_metrics(options.model_name, questions, targets, scores, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size, embeddings=embeddings_path)
     
     os.makedirs(save_path, exist_ok=True)
+    report(f"Saving to {save_path}")
     with open(f'{save_path}/prompt_geometry.json', 'w') as f:
         json.dump(results, f, indent=2)
