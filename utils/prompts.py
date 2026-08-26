@@ -129,7 +129,7 @@ def get_prompts_tatoeba(lang=None):
         "!!!! ??? ### @@@",
     ]
 
-def get_prompts_summeval():
+def get_prompts_summeval():   # THESE ARE THE WRONG WAY AROUND
     return [
         # Well-Fitting Instructions
         "Given a summary, retrieve the full document it was derived from",
@@ -331,7 +331,108 @@ def get_prompts_redditclustering():
         "!!!! ??? ### @@@",
         ]
 
-def get_prompts(data_name, **kwargs):
+def general_prompts(lang=None):
+    p = [
+        ## Abstask fallback prompts
+        ### [Clustering abstask]
+            "Identify categories in user passages.",  
+        ### [Classification abstask]
+            "Classify user passages.",
+        ### [Pair Classification abstask]
+            "Retrieve text that are semantically similar to the given text.",
+        ### [Retrieval abstask]
+            "Retrieve text based on user query.",
+        ### [STS abstask]
+            "Retrieve semantically similar text.",
+        ### [Summarization abstask](https://github.com/embeddings-benchmark/mteb/blob/main/mteb/abstasks/text/summarization.py#L51)
+            "Given a news summary, retrieve other semantically similar summaries."
+        ### [Bitext-mining abstask](https://github.com/embeddings-benchmark/mteb/blob/main/mteb/abstasks/text/bitext_mining.py#L54)
+            "Retrieve parallel sentences."
+
+        ## Task-specific prompts
+        ### [ARCChallenge]
+            "Retrieve the answer to the question.",
+        ### [RedditClustering]
+            "Identify the topic or theme of Reddit posts based on the titles.",
+        ### [Arxiv clustring]
+            "Identify the main and secondary category of Arxiv papers based on the titles.",
+
+        ## Other prompts (generated & hand selected)
+        ### Retrieval
+            "Given a question, retrieve the passage that best answers it.",
+            "Retrieve.",
+            "Find the most relevant passage that directly answers the question.",
+            "Given a question, find a related document.",
+        ### Summarization
+            "Summarize the given paragraph into a short paragraph.",
+            "Match the text to the short abstract.",
+            "Retrieve a summary.",
+            "Given the following brief summary, find the source document that contains the information it describes",  # intentionally wrong way around
+        ### Pair-classification
+            "Classify texts as entailment or contradiction."
+            "Determine whether the following two passages are contradictory, entailed, or neutral."
+            "Classify based on semantic similarity."
+        ### Clustering and classification
+            "Classify the following text into a meaningful cluster based on its content.",
+            "Group documents related to the same topic.",
+            "Cluster.",
+        ### STS
+            "Retrieve a similar passage.",
+            "Represent this sentence for a natural language understanding task.",
+            "Group passages based on semantic similarity.",
+        
+        ## No corresponding task (from other mteb tasks, removed domain-specificity)
+            "Retrieve duplicate questions from the forum.",
+            "Retrieve the most relevant problem description for the given code implementation."
+            "Rerank products by relevance to the e-commerce query.",
+            "Classify the sentiment of the given review as positive or negative",
+        ## General and vague prompts (generated)
+            "Search for related information.",
+            "Find documents related to the topic.",
+            "Find something useful.",
+            "Retrieve the passage that contains overlapping vocabulary with the source sentence.",
+        ## Keysmash
+            "asdfjkl qpwoeiru zxcvbnm",
+            "hgJKSbf oiawnef LKJHDS kdjfbs",
+            "!!!! ??? ### @@@",
+
+    ]
+    
+    if lang:
+        if "-" in lang:  # tatoeba format
+            l, eng_ = lang.split("-")
+            if eng_ != "eng":
+                raise AttributeError(f"Language to tatoeba prompt given incorrectly, is {lang}, should be fra-eng, deu-eng")
+        else:
+            l = lang   # assuming parsed already
+        try:
+            lang = languages.get(part2t=l).name
+        except KeyError as err:
+            raise KeyError(f"Cannot resolve {l} with iso639 in tatoeba prompts") from err
+        # add the parsed language here
+        p += [
+            f"Retrieve the corresponding translation in {lang}.",
+            f"Given an English sentence, find its translation in {lang}.",
+            f"Retrieve parellel sentences in {lang}.",
+            f"Translate to {lang}.",
+            "Find a sentence that has similar meaning.",
+        ]
+    # if no lang, just drop the "in {lang}"
+    else:
+        p += [
+            # when we have no language definition, just drop all "in {lang}"
+            f"Retrieve the corresponding translation.",
+            f"Given an English sentence, find its translation.",
+            f"Retrieve parellel sentences.",
+            f"Translate.",
+            "Find a sentence that has similar meaning.",
+        ]
+
+    return p
+
+
+
+def get_specific_prompts(data_name, **kwargs):
     if "arcchallenge" in data_name.lower():
         return get_prompts_arcchallenge()
     if "tatoeba" in data_name.lower():
@@ -346,6 +447,9 @@ def get_prompts(data_name, **kwargs):
         return get_prompts_sts()
     raise NotImplementedError(f"Prompts for {data_name} not implemented or cannot resolve data name")
 
+def get_prompts(data_name, lang=None):  # data_name here for convention
+    return general_prompts(lang=lang)
+
 def get_detailed_instruct(prompt, query, template="Instruct-Query"):
     """Given prompt, query, and template, return a filled template"""
     if prompt == "NO_PROMPT":
@@ -357,3 +461,9 @@ def get_detailed_instruct(prompt, query, template="Instruct-Query"):
     if template == "Instruct-Query":
         return f"Instruct: {prompt if prompt != 'EMPTY' else ''}\nQuery: {query}"
     raise NotImplementedError(f"{template=} not implemented")
+
+if __name__=="__main__":
+    prompts = get_prompts("Some data name", lang="ita")
+    print(len(prompts))
+    #print(get_prompts("Some data name", lang="deu-eng"))
+    #print(get_prompts("Some data name", lang=None))
