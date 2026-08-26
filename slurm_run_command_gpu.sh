@@ -2,9 +2,9 @@
 #SBATCH -A project_462001394
 #SBATCH -p small-g
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=2
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=20G
+#SBATCH --mem=30G
 #SBATCH -t 00:29:59
 #SBATCH -N 1
 #SBATCH -J evaluate
