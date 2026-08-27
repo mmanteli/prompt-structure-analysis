@@ -12,7 +12,7 @@ from evaluate_prompts import find_relevant_doc_id, write_embeddings
 from scipy.spatial.distance import pdist, squareform
 from utils.dataset_handling import download_dataset
 from utils.prompts import get_prompts, get_detailed_instruct
-from prompting_metrics import pairwise_distances, knn_overlap_score
+from prompting_metrics import pairwise_distances, knn_overlap_score, stats
 # this contains simply lists and dictionaries that help select the correct prompts
 
 cos = torch.nn.CosineSimilarity()
@@ -115,18 +115,6 @@ def create_STS_correspondence(corpus, queries, qrels, minmax=None):
     scores = np.array([2*(s-min_score)/(max_score-min_score)-1 for s in scores])
     # NOTE: this could also be a -1/1 mask based on the mean score..?
     return  targets, questions, scores, None if len(unmatched_targets["text"]) == 0 else unmatched_targets["text"]
-
-def stats(t):
-    """Extract summary statistics"""
-    if isinstance(t, torch.Tensor):
-        arr = t.detach().cpu().numpy().reshape(-1)
-    else:
-        arr = t
-    return {"mean": float(np.mean(arr)),
-            "std": float(np.std(arr)),
-            "median": float(np.median(arr)),
-            "q25": float(np.percentile(arr, 25)),
-            "q75": float(np.percentile(arr, 75))}
 
 
 def calculate_metrics(model_name, queries, answers, scores, prompts, template, wrong_answers=None, k=10, batch_size=8, embeddings=None):

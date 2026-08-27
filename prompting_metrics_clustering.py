@@ -12,7 +12,7 @@ from evaluate_prompts import find_relevant_doc_id, write_embeddings
 from scipy.spatial.distance import pdist, squareform
 from utils.dataset_handling import download_dataset
 from utils.prompts import get_prompts, get_detailed_instruct
-from prompting_metrics import pairwise_distances, knn_overlap_score
+from prompting_metrics import pairwise_distances, knn_overlap_score, stats
 # this contains simply lists and dictionaries that help select the correct prompts
 
 cos = torch.nn.CosineSimilarity()
@@ -29,6 +29,8 @@ parser.add_argument('--data_name', '--dataset', type=str|list,
                     help="HF-alias or path to downloaded dataset, can be a list.")
 parser.add_argument('--split', type=str, default="fit",
                     help="Which split to select from dataset.")
+parser.add_argument('--subsplit', type=str, default=None,
+                    help="Which subsplit to select from dataset (for clustering tasks).")
 parser.add_argument('--template', type=str, default="Instruct-Query", choices=["Instruct-Query", "simple"],
                     help="Which prompting template to use")
 parser.add_argument('--use_lang_specific_prompts', action='store_true',
@@ -37,7 +39,7 @@ parser.add_argument('--k', type=int, default=10,
                     help="which neighborhood size to use (for knn_ret and false_negs)")
 parser.add_argument('--batch_size', type=int, default=16,
                     help="batch size for embedding")
-parser.add_argument('--num_examples', type=int|bool, default=5000,
+parser.add_argument('--num_examples', type=int|bool, default=False,
                     help="For largest datasets, number of examples to downsample to, set to False for no downsampling")
 parser.add_argument('--embedding_prefix', type=str|bool, default=False,
                     help="prefix to save embedings to, works similar to --save_prefix")
@@ -93,18 +95,6 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
         found_ids.add(most_relevant_id)  # here we could also choose all relevant ids
     unmatched_targets = corpus.filter(lambda example: example["_id"] not in found_ids)
     return  targets, questions, unmatched_targets["text"]
-
-def stats(t):
-    """Extract summary statistics"""
-    if isinstance(t, torch.Tensor):
-        arr = t.detach().cpu().numpy().reshape(-1)
-    else:
-        arr = t
-    return {"mean": float(np.mean(arr)),
-            "std": float(np.std(arr)),
-            "median": float(np.median(arr)),
-            "q25": float(np.percentile(arr, 25)),
-            "q75": float(np.percentile(arr, 75))}
 
 
 def calculate_metrics_for_clustering(model_name, corpus, labels, prompts, template, k=10, batch_size=8, embeddings=None):
@@ -324,8 +314,9 @@ if __name__=="__main__":
     # if lang is given with column notation
     if ":" in options.data_name:
         options.data_name, lang = options.data_name.split(":")
+        report(f"Lang set to {lang}")
     # clustering/classification does not have queries: we construct separately
-    corpus, _, labels = download_dataset(options.data_name, split_to_select=options.split, downsample=options.num_examples)
+    corpus, _, labels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
     if options.use_lang_specific_prompts:
         prompts = get_prompts(options.data_name, lang=lang)
     else:
@@ -353,7 +344,7 @@ if __name__=="__main__":
     save_path = f"{options.save_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
     embeddings_path = None
     if options.embedding_prefix:
-        embeddings_path = f"{options.embedding_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_embeddings.pkl"
+        embeddings_path = f'{options.embedding_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ""}/{options.split}/{options.template}_embeddings{str(options.subsplit) if options.subsplit else ""}.pkl'
         os.makedirs(os.path.dirname(embeddings_path), exist_ok=True)
     # calculate results
     results = calculate_metrics_for_clustering(options.model_name, corpus, labels, prompts, options.template, k = options.k, batch_size=options.batch_size, embeddings=embeddings_path)
@@ -361,5 +352,5 @@ if __name__=="__main__":
     
     print(f"Saving to {save_path}")
     os.makedirs(save_path, exist_ok=True)
-    with open(f'{save_path}/prompt_geometry.json', 'w') as f:
+    with open(f'{save_path}/prompt_geometry{str(options.subsplit) if options.subsplit else ""}.json', 'w') as f:
         json.dump(results, f, indent=2)
