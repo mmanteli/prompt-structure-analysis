@@ -80,7 +80,7 @@ def create_STS_correspondence(corpus, queries, qrels, minmax=None):
             min_score, max_score = minmax
         # normalize scores
         scores = np.array([2*(s-min_score)/(max_score-min_score)-1 for s in qrels])
-        return corpus, queries, scores, None
+        return corpus, queries, scores
     # otherwise, construct them
     # here using question/target simply not to cofuse with the corpus and query variable names
     questions = []
@@ -114,18 +114,17 @@ def create_STS_correspondence(corpus, queries, qrels, minmax=None):
         min_score, max_score = minmax
     scores = np.array([2*(s-min_score)/(max_score-min_score)-1 for s in scores])
     # NOTE: this could also be a -1/1 mask based on the mean score..?
-    return  targets, questions, scores, None if len(unmatched_targets["text"]) == 0 else unmatched_targets["text"]
+    assert len(unmatched_targets["text"]) == 0, "We found unmatched targets for STS/Pair classification, should not be possible"
+    return  targets, questions, scores
 
 
-def calculate_metrics(model_name, queries, answers, scores, prompts, template, wrong_answers=None, k=10, batch_size=8, embeddings=None):
+def calculate_metrics(model_name, queries, answers, scores, prompts, template, k=10, batch_size=8, embeddings=None):
     """
     model_name: path or huggingface alias
     queries: datasets-object with columns "_id" and "text"
     anwers: datasets-object with columns "_id" and "text"
         NOTE: queries and corpus need to have 1 to 1 correspondence, i.e. no qrels here
     prompts: prompts to iterate over
-    wrong_answers: "leftovers" from corpus, texts that do not correpond to a query. These
-        will be added in the "negative" metrics
     k = number of neighbors considered. for kNN, it is on the query and target side (1 to 1)
         while in the negative metrics, it is on the target side
     """
@@ -145,16 +144,6 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
             report(f"Writing embeddings to {embeddings}")
             write_embeddings(file=embeddings, key="corpus", data={"text":answers}, embeddings=embeddings_a)
             write_embeddings(file=embeddings, key="queries", data={"text":queries}, embeddings=embeddings_q)
-        # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
-        if wrong_answers:
-            # yes filler, so concatenate them at the end
-            embeddings_wa = model.encode(wrong_answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
-            if embeddings:
-                write_embeddings(file=embeddings, key="wrong_answers", data={"text":wrong_answers}, embeddings=embeddings_wa)
-            embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
-        else:
-            # no filler
-            embeddings_all_a = embeddings_a
     else:  # we read embeddings, not calculate them
         print("Reading precalculated embeddings")
         prec = read_from_pickle(embeddings, "corpus")
@@ -162,30 +151,22 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         embeddings_a = prec["data"]["embeddings"]
         prec = read_from_pickle(embeddings, "queries")
         embeddings_q = prec["data"]["embeddings"]
-        if wrong_answers:
-            prec = read_from_pickle(embeddings, "wrong_answers")
-            embeddings_wa = prec["data"]["embeddings"]
-            embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
-        else:
-            # no filler
-            embeddings_all_a = embeddings_a
 
 
     # calculate everything we can calculate without using the prompt
     # chord vector from query to answer
-    delta_a = embeddings_a - embeddings_q
+    #delta_a = embeddings_a - embeddings_q   # not needed here: we add prompt to answer side as well
 
     # baseline: how similar are q and a without any prompt?
     sim_qa = cos(embeddings_q, embeddings_a)
 
     # negatives for metrics 6 & 7: here we can add the wrong answers (if they exist)
-    N_pool = embeddings_all_a.shape[0]
+    N_pool = embeddings_a.shape[0]
     N_q = embeddings_q.shape[0]
     k_hard = min(k, N_pool - 1)
     # add the filler
-    sim_q_all = torch.mm(embeddings_q, embeddings_all_a.T)
+    sim_q_all = torch.mm(embeddings_q, embeddings_a.T)
     # For each query, find indices of k nearest *wrong* answers
-    # since embeddings_q and embeddings_a are in order, and we just append embeddings_wa
     # we can still just mask the "diagonal" (i)
     # but then just search the larger area in torch.topk
     hard_neg_indices = []
@@ -200,28 +181,34 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
     for prompt_num, p in enumerate(prompts):
         # apply template and embed the prompt+query
         prompts_and_queries = [get_detailed_instruct(p, q, template=template) for q in queries]
+        prompts_and_answers = [get_detailed_instruct(p, a, template=template) for a in answers]
         # sanity check printout: see that template is filled correctly
         print(f"Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")  
         if calculate_embeddings:
             embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+            embeddings_pa = model.encode(prompts_and_answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
             if embeddings:
                 write_embeddings(file=embeddings, key=p, data={"text": prompts_and_queries}, embeddings=embeddings_pq)
+                write_embeddings(file=embeddings, key="answers:"+p, data={"text": prompts_and_answers}, embeddings=embeddings_pa)
         else:  # just read
             prec = read_from_pickle(embeddings, p)
             assert prec["data"]["text"] == prompts_and_queries, "mismatch between precalculated and dataset"
             embeddings_pq = prec["data"]["embeddings"]
+            prec = read_from_pickle(embeddings, "answers:"+p)
+            embeddings_pa = prec["data"]["embeddings"]
 
-        # Chord vector from query to prompted query ( to compare with delta_a)
+        # Chord vector from query to prompted query
         delta_pq = embeddings_pq - embeddings_q 
+        delta_pa = embeddings_pa - embeddings_a
 
         # ---- Metric 1: Angulation toward answer ----
         # cosine similarity between the two chord vectors
         # "Does the prompt move the query in the same direction as the answer?"
-        chord_sim = cos(delta_a, delta_pq) 
+        chord_sim = cos(delta_pa, delta_pq) 
 
         # ---- Metric 2: Direct similarity improvement ----
-        # "Does adding the prompt make pq closer to a than q was?"
-        sim_pqa = cos(embeddings_pq, embeddings_a)
+        # "Does adding the prompt make pq closer to pa than q was to a?"
+        sim_pqa = cos(embeddings_pq, embeddings_pa)
         sim_improvement = sim_pqa - sim_qa 
 
         # ---- Metric 3: Direct distance ----
@@ -229,18 +216,18 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         displacement = torch.linalg.norm(delta_pq, dim=1)
 
         # ---- Metric 4: Parallel vs orthogonal decomposition ----
-        # Project delta_pq onto the direction of delta_a
+        # Project delta_pq onto the direction of delta_pa
         # out of the total movement caused by the prompt,
         # how much is *toward the answer* vs *sideways*?
-        delta_a_norm = delta_a / (torch.linalg.norm(delta_a, dim=1, keepdim=True) + 1e-10)
+        delta_pa_norm = delta_pa / (torch.linalg.norm(delta_pa, dim=1, keepdim=True) + 1e-10)
         # 1e-10 here to avoid NaN --> has not other effect since norm is 0 <==> tensor is identically 0
-        parallel_magnitude = torch.sum(delta_pq * delta_a_norm, dim=1)  #signed scalar projection
+        parallel_magnitude = torch.sum(delta_pq * delta_pa_norm, dim=1)  #signed scalar projection
         orthogonal_magnitude = torch.sqrt(
             torch.clamp(torch.sum(delta_pq ** 2, dim=1) - parallel_magnitude ** 2, min=0.0),
         )  # follows from pythagorean theorem
 
         # Ratio: what fraction of the movement is toward the answer?
-        parallel_fraction = parallel_magnitude / (displacement + 1e-10)  # (N,), in [-1, 1]
+        parallel_fraction = parallel_magnitude / (displacement + 1e-10)
 
         # sanity check: parallel_fraction and chord_sim should equal (simply from pythagorean theorem)
         #assert torch.allclose(parallel_fraction, chord_sim, atol=1e-4), \
@@ -252,9 +239,13 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         # not directly applicable for STS: select only the positive pairs
         positive_mask = scores > 0
         knn_retention = knn_overlap_score(embeddings_pq[positive_mask].detach().cpu(), 
-                                          embeddings_a[positive_mask].detach().cpu(), 
+                                          embeddings_pa[positive_mask].detach().cpu(), 
                                           k=min(k, positive_mask.sum() - 1)
                                           )
+
+
+        # Here we refer to the past closest false neighbors
+        # hence the indices we calculated before, but we use the new embeddings
 
         # ---- Metric 6: displacement vs. wrong answers ----
         # "Does adding prompt take you away from incorrect answers?"
@@ -263,7 +254,7 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         # Negative = prompt moved query away from hard negatives (desirable).
         # so, add multiplication by -1 
         # now positive = desirable
-        sim_pq_all = torch.mm(embeddings_pq, embeddings_all_a.T)
+        sim_pq_all = torch.mm(embeddings_pq, embeddings_pa.T)
         hard_neg_sim_change = -1*torch.tensor([
             (sim_pq_all[i, hard_neg_indices[i]]
             - sim_q_all[i, hard_neg_indices[i]]).mean().item()
@@ -277,11 +268,11 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         # Positive = prompt pushes toward hard negatives (undesirable).
         # Negative = prompt pushes away from hard negatives (desirable).
         # so again, multiply by -1
-        all_embeddings = embeddings_all_a
+        all_embeddings = embeddings_pa
         hard_neg_angulation = -1 * torch.tensor([
             cos(
-                delta_pq[i].unsqueeze(0).expand(k_hard, -1),    # (k_hard, D)
-                all_embeddings[hard_neg_indices[i]] - embeddings_q[i]  # (k_hard, D)
+                delta_pq[i].unsqueeze(0).expand(k_hard, -1),
+                all_embeddings[hard_neg_indices[i]] - embeddings_q[i]
             ).mean().item()
             for i in range(N_q)
         ])
@@ -295,6 +286,7 @@ def calculate_metrics(model_name, queries, answers, scores, prompts, template, w
         # with some, this does not work
         # for example displacement is always >0
         # same for knn and the neg metrics which are not really applicable here
+        # hence we took the measures that were described in the comments
         results[f"prompt{prompt_num}"] = {
             "prompt_text": p if p != "" else "empty",           # prompt text, with "" redirected to "empty"
             "example_text": prompts_and_queries[0],             # example text as a sanity check
@@ -352,7 +344,7 @@ if __name__=="__main__":
     # preprocess the data
     # create 1-to-1 correspondence (STS datasets already have this)
     # and most importantly: normalize scores to -1 to 1
-    targets, questions, scores, filler_targets = create_STS_correspondence(corpus, queries, qrels)
+    targets, questions, scores = create_STS_correspondence(corpus, queries, qrels)
     # filler targets is in almost ALL cases None here
     print(f"Sanity check:  These should have score {scores[0]}:\n{questions[0]=}\n{targets[0]}")
 
@@ -368,7 +360,7 @@ if __name__=="__main__":
         embeddings_path = f"{options.embedding_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_embeddings.pkl"
         os.makedirs(os.path.dirname(embeddings_path), exist_ok=True)
     # calculate results
-    results = calculate_metrics(options.model_name, questions, targets, scores, prompts, options.template, wrong_answers=filler_targets, k = options.k, batch_size=options.batch_size, embeddings=embeddings_path)
+    results = calculate_metrics(options.model_name, questions, targets, scores, prompts, options.template, k = options.k, batch_size=options.batch_size, embeddings=embeddings_path)
     
     os.makedirs(save_path, exist_ok=True)
     report(f"Saving to {save_path}")
