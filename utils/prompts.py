@@ -347,7 +347,7 @@ def general_prompts(lang=None):
         ### [Summarization abstask](https://github.com/embeddings-benchmark/mteb/blob/main/mteb/abstasks/text/summarization.py#L51)
             "Given a news summary, retrieve other semantically similar summaries."
         ### [Bitext-mining abstask](https://github.com/embeddings-benchmark/mteb/blob/main/mteb/abstasks/text/bitext_mining.py#L54)
-            "Retrieve parallel sentences."
+            "Retrieve parallel sentences.",
 
         ## Task-specific prompts
         ### [ARCChallenge]
@@ -367,11 +367,11 @@ def general_prompts(lang=None):
             "Summarize the given paragraph into a short paragraph.",
             "Match the text to the short abstract.",
             "Retrieve a summary.",
-            "Given the following brief summary, find the source document that contains the information it describes",  # intentionally wrong way around
+            "Given the following brief summary, find the source document that contains the information it describes.",  # intentionally wrong way around
         ### Pair-classification
-            "Classify texts as entailment or contradiction."
-            "Determine whether the following two passages are contradictory, entailed, or neutral."
-            "Classify based on semantic similarity."
+            "Classify texts as entailment or contradiction.",
+            "Determine whether the following two passages are contradictory, entailed, or neutral.",
+            "Classify based on semantic similarity.",
         ### Clustering and classification
             "Classify the following text into a meaningful cluster based on its content.",
             "Group documents related to the same topic.",
@@ -383,9 +383,11 @@ def general_prompts(lang=None):
         
         ## No corresponding task (from other mteb tasks, removed domain-specificity)
             "Retrieve duplicate questions from the forum.",
-            "Retrieve the most relevant problem description for the given code implementation."
+            "Retrieve the most relevant problem description for the given code implementation.",
             "Rerank products by relevance to the e-commerce query.",
-            "Classify the sentiment of the given review as positive or negative",
+            "Classify the sentiment of the given review as positive or negative.",
+            "Generate a creative story based on the prompt.",
+            "Extract all named entities from the text and categorise them as PERSON, LOCATION, or ORGANIZATION.",
         ## General and vague prompts (generated)
             "Search for related information.",
             "Find documents related to the topic.",

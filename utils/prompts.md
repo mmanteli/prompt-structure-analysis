@@ -99,6 +99,11 @@ Examples taken from [here](https://github.com/embeddings-benchmark/mteb/blob/mai
     "Rerank products by relevance to the e-commerce query.",
     "Classify the sentiment of the given review as positive or negative",
 
+Prompt that are not about embedding tasks
+
+    "Generate a creative story based on the prompt",
+    "Extract all named entities from the text and categorise them as PERSON, LOCATION, or ORGANIZATION",
+
 
 ## General and vague prompts
 
