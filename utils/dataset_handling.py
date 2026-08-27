@@ -77,7 +77,7 @@ def download_arcchallenge(split_to_select="test", downsample=False, **kwargs):
 
 # -------------------------------------CLASSIFICATION------------------------------------- #
 
-def download_multihate_from_hub(lang=None, split_to_select="test"):
+def download_multihate_from_hub(lang=None, split_to_select="test", **kwargs):
     report(f"Downloading mteb/multi-hatecheck {lang=}, {split_to_select=} from hf-hub")
     assert split_to_select == "test", "Only test split for mteb/multi-hatecheck"
     assert lang is not None, "Must give lang for mteb/multi-hatecheck, --data_name=mteb/multi-hatecheck:\{lang\}"
