@@ -34,8 +34,6 @@ is_lang_specific_data() {
     return 0
 }
 
-# ── First: structural analysis ──────────────────────────────────────
-
 for dataset in "mteb/reddit-clustering"; do   
     for model in "${MODELS[@]}"; do
         for template in "Instruct-Query"; do
@@ -43,6 +41,7 @@ for dataset in "mteb/reddit-clustering"; do
                 --model=$model \
                 --data_name=$dataset \
                 --split="test" \
+                --subsplit=0 \
                 --template="$template" \
                 --save_prefix="prompt_structure_results" \
                 --embedding_prefix="embeddings_struct" \
@@ -51,6 +50,28 @@ for dataset in "mteb/reddit-clustering"; do
             wait_for_space
             echo "${model}:${dataset}:${split}_${template}"
             sbatch --job-name="prompt_metrics_${model}_${dataset}:${split}_${template}" -t 4:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+        done
+    done
+done
+
+
+for dataset in "mteb/multi-hatecheck"; do   
+    for model in "${MODELS[@]}"; do
+        for template in "Instruct-Query"; do
+            for lang in "eng" "fra"; do
+                CMD=(python prompting_metrics_clustering.py \
+                    --model=$model \
+                    --data_name="${dataset}:${lang}" \
+                    --split="test" \
+                    --template="$template" \
+                    --save_prefix="prompt_structure_results" \
+                    --embedding_prefix="embeddings_struct" \
+                    --batch_size=4)
+
+                wait_for_space
+                echo "${model}:${dataset}:${split}_${template}"
+                sbatch --job-name="prompt_metrics_${model}_${dataset}:${split}_${template}" -t 4:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            done
         done
     done
 done
