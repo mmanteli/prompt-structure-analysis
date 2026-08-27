@@ -217,7 +217,7 @@ def download_dataset(data_name, **kwargs):
         return download_arxivclustering_from_hub(**kwargs)
     if data_name == "mteb/multi-hatecheck":
         return download_multihate_from_hub(**kwargs)
-    if data_name == "mteb/RTE":
+    if data_name == "mteb/RTE3":
         return download_rte_from_hub(**kwargs)
     raise NotImplementedError(f"Unable to download a dataset with arguments {data_name=} {kwargs}")
 
