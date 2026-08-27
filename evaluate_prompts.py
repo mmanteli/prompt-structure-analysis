@@ -212,7 +212,7 @@ def stats(t):
             "median": float(np.median(arr)),
             "q25": float(np.percentile(arr, 25)),
             "q75": float(np.percentile(arr, 75)),
-            #"full": str(arr)
+            "full": str(arr)
             }
 
 def calculate_scores(k, corpus, queries, qrels, corpus_embeddings, query_embeddings):

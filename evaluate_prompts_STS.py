@@ -1,5 +1,7 @@
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import normalize
+from sklearn.metrics import average_precision_score
+from scipy.stats import bootstrap
 import numpy as np
 import datasets
 import jsonargparse
@@ -90,16 +92,6 @@ def find_relevant_doc_id(query_id, qrels):
     indices_that_sort = np.argsort(associated_corpus_scores)[::-1]
     return (associated_corpus_values[indices_that_sort].tolist(), associated_corpus_scores[indices_that_sort].tolist())
 
-def stats(t):
-    """Extract summary statistics"""
-    arr = t # .detach().cpu().numpy().reshape(-1)  # apply these if you're handling tensors
-    return {"mean": float(np.mean(arr)),
-            "std": float(np.std(arr)),
-            "median": float(np.median(arr)),
-            "q25": float(np.percentile(arr, 25)),
-            "q75": float(np.percentile(arr, 75)),
-            #"full": str(arr)
-            }
 
 def calculate_scores(k, scores, corpus_embeddings, query_embeddings):
     """
@@ -107,9 +99,42 @@ def calculate_scores(k, scores, corpus_embeddings, query_embeddings):
     ASSUMES corpus and queries to be in order!
     """
     sims = cos(torch.tensor(corpus_embeddings), torch.tensor(query_embeddings)).detach().cpu().numpy()
-    score = spearmanr(scores, sims)
-    return {f"cosine-spearman": score}
-
+    cos_spearman_score = spearmanr(scores, sims)
+    # we can only calculate the following for binary relevance
+    if set(scores).issubset({0,1}):
+        average_prec = average_precision_score(scores, sims)
+        # wrapper that makes sure we do not crash if the label distribution is skewed
+        def avg_prec_skip_cases_with_only_one_label(sc, si):
+            if len(np.unique(sc)) < 2:
+                return np.nan
+            return average_precision_score(sc, si)
+        CI_avg_precision = bootstrap((scores, sims),
+                            statistic=avg_prec_skip_cases_with_only_one_label(sc, si),
+                            n_resamples=1000,
+                            paired=True,
+                            confidence_level=0.95,
+                            method='BCa')
+        return {
+                "cosine-spearman": {
+                    "mean": cos_spearman_score.statistic,   # for naming convention: easy to read all
+                    "p_value": cos_spearman_score.pvalue,
+                },
+                "average_precision": {
+                    "mean": average_prec,
+                    "standard_error": CI_avg_precision.standard_error,
+                    "confidence_interval": (
+                        CI_avg_precision.confidence_interval.low,
+                        CI_avg_precision.confidence_interval.high
+                        )
+                    }
+                }
+    
+    return {
+            "cosine-spearman": {
+                "mean": cos_spearman_score.statistic,   # for naming convention: easy to read all
+                "p_value": cos_spearman_score.pvalue,
+            },
+    }
 
 def embed_and_calculate_STS_scores(options, dataset_specific_prompts, corpus, queries, scores):
     """Embed corpus, queries (+prompts) and calculate evaluation scores."""

@@ -1,5 +1,6 @@
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import normalize
+from scipy.stats import bootstrap
 import numpy as np
 import datasets
 import jsonargparse
@@ -10,7 +11,7 @@ import random
 from utils.prompts import get_prompts, get_detailed_instruct
 from utils.dataset_handling import download_dataset
 from sklearn.cluster import KMeans
-from sklearn.metrics import v_measure_score, adjusted_mutual_info_score
+from sklearn.metrics import v_measure_score, adjusted_mutual_info_score, accuracy_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
 
@@ -30,6 +31,8 @@ parser.add_argument('--data_name', '--dataset', type=str, default="mteb/ARCChall
                     help="HF-alias or path to downloaded dataset.")
 parser.add_argument('--split', type=str, default=None,
                     help="Which split to select from dataset.")
+parser.add_argument('--subsplit', type=str, default=None,
+                    help="Which subsplit to select from dataset (for clustering tasks).")
 parser.add_argument('--template', type=str, default="Instruct-Query", choices=["Instruct-Query", "simple"],
                     help="Which prompting template to use")
 parser.add_argument('--use_lang_specific_prompts', '--use_language_specific_prompts', action='store_true',
@@ -92,55 +95,62 @@ def find_relevant_doc_id(query_id, qrels):
     indices_that_sort = np.argsort(associated_corpus_scores)[::-1]
     return (associated_corpus_values[indices_that_sort].tolist(), associated_corpus_scores[indices_that_sort].tolist())
 
-def stats(t):
-    """Extract summary statistics"""
-    arr = t # .detach().cpu().numpy().reshape(-1)  # apply these if you're handling tensors
-    return {"mean": float(np.mean(arr)),
-            "std": float(np.std(arr)),
-            "median": float(np.median(arr)),
-            "q25": float(np.percentile(arr, 25)),
-            "q75": float(np.percentile(arr, 75)),
-            #"full": str(arr)
-            }
+
 
 def calculate_scores(embeddings, true_labels):
     """
     Calculate V score and AMI for K-means clustering results,
     and Log-regression for classification
-    from sklearn.linear_model import LogisticRegression
-    X, y = load_iris(return_X_y=True)
-    clf = LogisticRegression(random_state=0).fit(X, y)
-    clf.predict(X[:2, :])
-    array([0, 0])
-    clf.predict_proba(X[:2, :])
-    array([[9.82e-01, 1.82e-02, 1.44e-08],
-        [9.72e-01, 2.82e-02, 3.02e-08]])
-    clf.score(X, y)
-    0.97
     """
+    # first make the true labels numeric
     if isinstance(true_labels[0],str):
         # make them numbers
         label2id = {v:k for k, v in enumerate(np.unique(true_labels))}
         true_labels = [label2id[t] for t in true_labels]
+    
     # classification
     clf = LogisticRegression(random_state=seed, max_iter=1000).fit(embeddings, true_labels)
-    # accuracy
-    acc = clf.score(embeddings, true_labels)
-    # F1
     pred_labels_logr = clf.predict(embeddings)
-    f1 = f1_score(true_labels, pred_labels_logr, average="micro")
-
+    # accuracy and f1 in the return statement
 
     # clustering
     num_labels = len(np.unique(true_labels))
     kmeans = KMeans(n_clusters=num_labels, random_state=seed)
     pred_labels_clst = kmeans.fit_predict(embeddings)
 
-    return {"V-score": v_measure_score(true_labels, pred_labels_clst),
-            "AMI": adjusted_mutual_info_score(true_labels, pred_labels_clst),
-            "Accuracy": acc,
-            "F1":f1
-            }
+    # bootstrapping function
+    def bootstrap_metric(y_true, y_pred, metric_fn):
+        ci = bootstrap(
+            (y_true, y_pred),
+            statistic=metric_fn,
+            n_resamples=1000,
+            paired=True,
+            confidence_level=0.95,
+            method='BCa'
+        )
+        return {
+            "standard_error": ci.standard_error,
+            "confidence_interval": (ci.confidence_interval.low, ci.confidence_interval.high)
+        }
+
+    return {
+        "V-score": {
+            "mean": v_measure_score(true_labels, pred_labels_clst),
+            **bootstrap_metric(true_labels, pred_labels_clst, v_measure_score)
+        },
+        "AMI": {
+            "mean": adjusted_mutual_info_score(true_labels, pred_labels_clst),
+            #**bootstrap_metric(true_labels, pred_labels_clst, adjusted_mutual_info_score)  # not the main score
+        },
+        "Accuracy": {
+            "mean": clf.score(embeddings, true_labels),
+            **bootstrap_metric(true_labels, pred_labels_logr, accuracy_score)  # faster than clf.score
+        },
+        "F1": {
+            "mean": f1_score(true_labels, pred_labels_logr, average="micro"),
+            #**bootstrap_metric(true_labels, pred_labels_logr, lambda yt, yp: f1_score(yt, yp, average="micro"))# again, not the main score
+        }
+    }
 
 
 def embed_and_calculate_cluster_scores(options, dataset_specific_prompts, corpus, labels):
@@ -245,8 +255,8 @@ if __name__=="__main__":
     if lang is not None:
         data_safe_name += f":{lang}"
     # only set this if the prefix was given
-    options.embeddings = "" if not options.embedding_prefix else f'{options.embedding_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_embeddings.pkl'
-    options.save_path =  f'{options.save_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/results@{options.k}.json'
+    options.embeddings = "" if not options.embedding_prefix else f'{options.embedding_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_embeddings{str(options.subsplit) if options.subsplit else ""}.pkl'
+    options.save_path =  f'{options.save_prefix}/{model_name_}/{data_safe_name}{"_lang_specific" if options.use_lang_specific_prompts else ""}/{options.split}/{options.template}_template/results{str(options.subsplit) if options.subsplit else ""}@{options.k}.json'
     
     if options.embeddings != "" and os.path.exists(options.embeddings):
         # we have precalculated embeddings
