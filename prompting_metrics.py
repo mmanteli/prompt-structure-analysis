@@ -184,15 +184,18 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
 def stats(t):
     """Extract summary statistics"""
     if isinstance(t, torch.Tensor):
-        arr = t.detach().cpu().numpy().reshape(-1)
+        arr = t.detach().cpu().numpy().reshape(-1).tolist()
     else:
-        arr = t
+        if isinstance(t, list):
+            arr = t
+        else:
+            arr = t.tolist()
     return {"mean": float(np.mean(arr)),
             "std": float(np.std(arr)),
             "median": float(np.median(arr)),
             "q25": float(np.percentile(arr, 25)),
             "q75": float(np.percentile(arr, 75)),
-            "full": str(arr.tolist())}
+            "full": str(arr)}
 
 
 def calculate_metrics(model_name, queries, answers, prompts, template, wrong_answers=None, k=10, batch_size=8, embeddings=None):
@@ -398,6 +401,7 @@ if __name__=="__main__":
     # download prompts
     # this returns a list of possible instructions to use on the query side
     if options.use_lang_specific_prompts:
+        assert lang is not None, "Give language for language specific prompts"
         prompts = get_prompts(options.data_name, lang=lang)
     else:
         prompts =  get_prompts(options.data_name)

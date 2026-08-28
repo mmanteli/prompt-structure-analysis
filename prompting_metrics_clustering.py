@@ -318,6 +318,7 @@ if __name__=="__main__":
     # clustering/classification does not have queries: we construct separately
     corpus, _, labels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
     if options.use_lang_specific_prompts:
+        assert lang is not None, "Give language for language specific prompts"
         prompts = get_prompts(options.data_name, lang=lang)
     else:
         prompts =  get_prompts(options.data_name)

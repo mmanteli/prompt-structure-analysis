@@ -326,6 +326,7 @@ if __name__=="__main__":
     # download prompts
     # this returns a list of possible instructions to use on the query side
     if options.use_lang_specific_prompts:
+        assert lang is not None, "Give language for language specific prompts"
         prompts = get_prompts(options.data_name, lang=lang)
     else:
         prompts =  get_prompts(options.data_name)
