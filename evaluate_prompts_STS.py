@@ -109,7 +109,7 @@ def calculate_scores(k, scores, corpus_embeddings, query_embeddings):
                 return np.nan
             return average_precision_score(sc, si)
         CI_avg_precision = bootstrap((scores, sims),
-                            statistic=avg_prec_skip_cases_with_only_one_label(sc, si),
+                            statistic=lambda sc, si: avg_prec_skip_cases_with_only_one_label(sc, si),
                             n_resamples=1000,
                             paired=True,
                             confidence_level=0.95,
@@ -148,7 +148,7 @@ def embed_and_calculate_STS_scores(options, dataset_specific_prompts, corpus, qu
     assert isinstance(scores, list) or isinstance(scores, np.array)
     
     # download model
-    model = SentenceTransformer(options.model_name)
+    model = SentenceTransformer(options.model_name, trust_remote_code=True)
     # embed the corpus==targets/answers --> prompt has no effect on these
     corpus_embeddings = model.encode(corpus, normalize_embeddings=True, batch_size=options.batch_size)
     if options.embeddings:
@@ -218,6 +218,7 @@ if __name__=="__main__":
         options.data_name, lang = options.data_name.split(":")
     corpus, queries, scores = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
     if options.use_lang_specific_prompts:
+        assert lang is not None, "Give language for language specific prompts"
         prompts = get_prompts(options.data_name, lang=lang)
     else:
         prompts =  get_prompts(options.data_name)

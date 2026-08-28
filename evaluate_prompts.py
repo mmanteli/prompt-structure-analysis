@@ -285,13 +285,13 @@ def embed_and_calculate_scores(options, dataset_specific_prompts, corpus, querie
     assert "text" in queries.column_names and "_id" in queries.column_names
     
     # download model
-    model = SentenceTransformer(options.model_name)
+    model = SentenceTransformer(options.model_name, trust_remote_code=True)
     # embed the corpus==targets/answers --> prompt has no effect on these
     corpus_embeddings = model.encode(corpus["text"], normalize_embeddings=True, batch_size=options.batch_size)
     if options.embeddings:
         os.makedirs(os.path.dirname(options.embeddings), exist_ok=True)
         write_embeddings(file=options.embeddings, key="qrels", data=qrels, embeddings=None)
-        write_embeddings(file=options.embeddings, key="corpus", data=corpus, embeddings=corpus_embeddings)
+        write_embeddings(file=options.embeddings, key="corpus", data={"_id":corpus["_id"], "text":corpus["text"]}, embeddings=corpus_embeddings)
 
     # loop over prompts
     results = {}
@@ -359,6 +359,7 @@ if __name__=="__main__":
         options.data_name, lang = options.data_name.split(":")
     corpus, queries, qrels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
     if options.use_lang_specific_prompts:
+        assert lang is not None, "Give language for language specific prompts"
         prompts = get_prompts(options.data_name, lang=lang)
     else:
         prompts =  get_prompts(options.data_name)

@@ -161,7 +161,7 @@ def embed_and_calculate_cluster_scores(options, dataset_specific_prompts, corpus
         corpus = corpus["text"]
     
     # download model
-    model = SentenceTransformer(options.model_name)
+    model = SentenceTransformer(options.model_name, trust_remote_code=True)
     # Normally, we would encode the "target"/corpus here, but since we will be adding prompt to all
     # text, we can skip this step
     corpus_embeddings = [None]*len(labels) #model.encode(corpus, normalize_embeddings=True, batch_size=options.batch_size)
@@ -234,6 +234,7 @@ if __name__=="__main__":
         options.data_name, lang = options.data_name.split(":")
     corpus, _, labels = download_dataset(options.data_name, lang=lang, split_to_select=options.split, downsample=options.num_examples)
     if options.use_lang_specific_prompts:
+        assert lang is not None, "Give language for language specific prompts"
         prompts = get_prompts(options.data_name, lang=lang)
     else:
         prompts =  get_prompts(options.data_name)
