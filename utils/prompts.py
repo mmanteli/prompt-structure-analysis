@@ -345,7 +345,7 @@ def general_prompts(lang=None):
         ### [STS abstask]
             "Retrieve semantically similar text.",
         ### [Summarization abstask](https://github.com/embeddings-benchmark/mteb/blob/main/mteb/abstasks/text/summarization.py#L51)
-            "Given a news summary, retrieve other semantically similar summaries."
+            "Given a news summary, retrieve other semantically similar summaries.",
         ### [Bitext-mining abstask](https://github.com/embeddings-benchmark/mteb/blob/main/mteb/abstasks/text/bitext_mining.py#L54)
             "Retrieve parallel sentences.",
 
@@ -397,6 +397,9 @@ def general_prompts(lang=None):
             "asdfjkl qpwoeiru zxcvbnm",
             "hgJKSbf oiawnef LKJHDS kdjfbs",
             "!!!! ??? ### @@@",
+
+        # Fine tuning
+            "Given a question, retrieve Wikipedia passages that answer the question.",
 
     ]
     

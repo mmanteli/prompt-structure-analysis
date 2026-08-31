@@ -122,5 +122,7 @@ Intentionally nonsense prompts.
     "hgJKSbf oiawnef LKJHDS kdjfbs",
     "!!!! ??? ### @@@",
 
+# Finetuning prompt
 
+    "Given a question, retrieve Wikipedia passages that answer the question."
 
