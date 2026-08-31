@@ -49,6 +49,14 @@ def download_webfaq(lang=None, split_to_select="test", downsample=False,**kwargs
     del ds
     return corpus, queries, qrels_map
 
+def download_squad_from_hub(split_to_select="test", **kwargs):
+    report(f"Downloading SQuAD ({split_to_select}) from hf-hub")
+    ds = datasets.load_dataset("rajpurkar/squad", split=split_to_select)
+    corpus = ds["test"]["context"]
+    queries = ds["test"]["question"]
+    qrels_dict = {k:k for k in range(len(corpus))}
+    return corpus, queries, qrels_map
+
 
 def download_arcchallenge_from_hub(**kwargs):
     report("Downloading ARCChallenge from the hf-hub")
@@ -74,6 +82,17 @@ def download_arcchallenge(split_to_select="test", downsample=False, **kwargs):
     del ds
     return corpus, queries, qrels_map
 
+
+def download_nq_from_hub(**kwargs):
+    report("Downloading Natural Questions from the hf-hub")
+    split_to_select = "test"   # this is the only choice
+    # download all 3 files for retrieval
+    corpus = datasets.load_dataset("mteb/nq", "corpus", revision="b774495ed302d8c44a3a7ea25c90dbce03968f31")
+    qrels = datasets.load_dataset("mteb/nq", "default", revision="b774495ed302d8c44a3a7ea25c90dbce03968f31")
+    queries = datasets.load_dataset("mteb/nq", "queries", revision="b774495ed302d8c44a3a7ea25c90dbce03968f31")
+    return corpus[split_to_select], \
+           queries[split_to_select], \
+           qrels[split_to_select].rename_column("query-id","query_id").rename_column("corpus-id", "corpus_id")
 
 # -------------------------------------CLASSIFICATION------------------------------------- #
 
@@ -219,6 +238,10 @@ def download_dataset(data_name, **kwargs):
         return download_multihate_from_hub(**kwargs)
     if data_name == "mteb/RTE3":
         return download_rte_from_hub(**kwargs)
+    if data_name == "rajpurkar/squad":
+        return download_squad_from_hub(**kwargs)
+    if data_name == "mteb/nq":
+        return download_nq_from_hub(**kwargs)
     raise NotImplementedError(f"Unable to download a dataset with arguments {data_name=} {kwargs}")
 
 if __name__ == "__main__":
