@@ -28,21 +28,24 @@ is_lang_specific_data() {
 k=10
 
 MODELS=(
-    #"BAAI/bge-m3"
-    "Qwen/Qwen3-Embedding-0.6B"
+    "BAAI/bge-m3"
+    "Qwen/Qwen3-Embedding-0.6"
     "intfloat/multilingual-e5-large-instruct"
-    #"nvidia/llama-embed-nemotron-8b"
+    "nvidia/llama-embed-nemotron-8b"
     "microsoft/harrier-oss-v1-0.6b"
-    #"nvidia/NV-Embed-v2"
+    "nvidia/NV-Embed-v2"
     "google/embeddinggemma-300m"
+    "codefuse-ai/F2LLM-v2-8B"
+    "Octen/Octen-Embedding-8B"
+    "jinaai/jina-embeddings-v5-text-small"
 )
 
 DATASETS=(
     "mteb/ARCChallenge"
     "mteb/tatoeba-bitext-mining:fin-eng"
     "mteb/tatoeba-bitext-mining:fra-eng"
-    "webfaq:eng"
-    "webfaq:deu"
+    "mteb/tatoeba-bitext-mining:zho-eng"
+    "mteb/tatoeba-bitext-mining:ara-eng"
 )
 
 for split in test; do
@@ -52,7 +55,7 @@ for split in test; do
             safe_model="${model//\//_}"
 
             for data in "${DATASETS[@]}"; do
-                safe_data="${data//:/_}"
+                safe_data="${data//\//_}"
 
                 CMD=(python evaluate_prompts.py \
                     --k=$k \
@@ -66,7 +69,7 @@ for split in test; do
 
                 wait_for_space
                 #echo "eval_${safe_model}_${safe_data}_${split}_${template}"
-                sbatch --job-name="eval_${safe_model}_${safe_data}_${split}_${template}" \
+                sbatch --job-name="eval/${safe_model}_${safe_data}_${split}_${template}" \
                        -t 02:59:59 \
                        slurm_run_command_gpu.sh "${CMD[@]}"
 
@@ -84,7 +87,7 @@ for split in test; do
 
                     wait_for_space
                     echo "eval_${safe_model}_${safe_data}_LANG_SPECIFIC_${split}_${template}"
-                    sbatch --job-name="eval_${safe_model}_${safe_data}_${split}_${template}_lang_specific" \
+                    sbatch --job-name="eval/${safe_model}_${safe_data}_${split}_${template}_lang_specific" \
                            -t 02:59:59 \
                            slurm_run_command_gpu.sh "${CMD[@]}"
                 fi

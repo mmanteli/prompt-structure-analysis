@@ -16,23 +16,19 @@ wait_for_space() {
 
 
 MODELS=(
-    #"BAAI/bge-m3"
-    "Qwen/Qwen3-Embedding-0.6B"
+    "BAAI/bge-m3"
+    "Qwen/Qwen3-Embedding-0.6"
     "intfloat/multilingual-e5-large-instruct"
-    #"nvidia/llama-embed-nemotron-8b"
+    "nvidia/llama-embed-nemotron-8b"
     "microsoft/harrier-oss-v1-0.6b"
-    #"nvidia/NV-Embed-v2"
+    "nvidia/NV-Embed-v2"
     "google/embeddinggemma-300m"
+    "codefuse-ai/F2LLM-v2-8B"
+    "Octen/Octen-Embedding-8B"
+    "jinaai/jina-embeddings-v5-text-small"
 )
 
-
-is_lang_specific_data() {
-    local d="$1"
-    for skip in "${NON_LANG_DATASETS[@]}"; do
-        [[ "$d" == "$skip" ]] && return 1
-    done
-    return 0
-}
+split="test"
 
 for dataset in "mteb/reddit-clustering"; do   
     for model in "${MODELS[@]}"; do
@@ -40,16 +36,17 @@ for dataset in "mteb/reddit-clustering"; do
             CMD=(python prompting_metrics_clustering.py \
                 --model=$model \
                 --data_name=$dataset \
-                --split="test" \
+                --split=$split \
                 --subsplit=0 \
                 --template="$template" \
                 --save_prefix="prompt_structure_results" \
                 --embedding_prefix="embeddings_struct" \
                 --batch_size=4)
-
+            model_safe_name="${model//\//_}"
+            data_safe_name="${dataset//\//_}"
             wait_for_space
             echo "${model}:${dataset}:${split}_${template}"
-            sbatch --job-name="prompt_metrics_${model}_${dataset}:${split}_${template}" -t 4:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            sbatch --job-name="prompt_metrics/${model_safe_name}_${data_safe_name}:${split}_${template}" -t 4:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
         done
     done
 done
@@ -62,15 +59,16 @@ for dataset in "mteb/multi-hatecheck"; do
                 CMD=(python prompting_metrics_clustering.py \
                     --model=$model \
                     --data_name="${dataset}:${lang}" \
-                    --split="test" \
+                    --split=$split \
                     --template="$template" \
                     --save_prefix="prompt_structure_results" \
                     --embedding_prefix="embeddings_struct" \
                     --batch_size=4)
-
+                model_safe_name="${model//\//_}"
+                data_safe_name="${dataset//\//_}"
                 wait_for_space
                 echo "${model}:${dataset}:${split}_${template}"
-                sbatch --job-name="prompt_metrics_${model}_${dataset}:${split}_${template}" -t 4:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
+                sbatch --job-name="prompt_metrics/${model_safe_name}_${data_safe_name}:${lang}:${split}_${template}" -t 4:39:59 slurm_run_command_gpu.sh "${CMD[@]}"
             done
         done
     done
