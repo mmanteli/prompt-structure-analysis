@@ -1,6 +1,8 @@
 import random
 import datasets
 import os
+import json
+import pandas as pd
 seed = 42
 random.seed(seed)
 
@@ -82,6 +84,14 @@ def download_arcchallenge(split_to_select="test", downsample=False, **kwargs):
     del ds
     return corpus, queries, qrels_map
 
+def download_squad(**kwargs):
+    with open("/scratch/project_462001491/jmnybl/squad_v1.1/train-splits/train-dev.json") as file:
+        dev_data = json.load(file)
+    df = pd.DataFrame.from_dict(dev_data)
+    corpus = datasets.Dataset.from_dict({"text":df["answer_paragraph"], "_id":[k for k in range(len(df))]})
+    queries = datasets.Dataset.from_dict({"text":df["question"], "_id":[k for k in range(len(df))]})
+    qrels = {k:k for k in range(len(df))}
+    return corpus, queries, qrels
 
 def download_nq_from_hub(**kwargs):
     report("Downloading Natural Questions from the hf-hub")
@@ -221,6 +231,8 @@ def download_dataset(data_name, **kwargs):
         return download_tatoeba(**kwargs)
     if data_name.lower() == "webfaq":
         return download_webfaq(**kwargs)
+    if data_name.lower() == "squad":
+        return download_squad(**kwargs)
     # actual downloads
     if data_name == "mteb/ARCChallenge":
         return download_arcchallenge_from_hub(**kwargs)
