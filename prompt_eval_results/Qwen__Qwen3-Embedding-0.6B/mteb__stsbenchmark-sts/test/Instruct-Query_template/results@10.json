@@ -1,0 +1,324 @@
+{
+  "prompt0": {
+    "prompt_text": "NO_PROMPT",
+    "cosine-spearman": {
+      "mean": 0.8459480644224818,
+      "p_value": 0.0
+    }
+  },
+  "prompt1": {
+    "prompt_text": "EMPTY",
+    "cosine-spearman": {
+      "mean": 0.8564101732850548,
+      "p_value": 0.0
+    }
+  },
+  "prompt2": {
+    "prompt_text": "Identify categories in user passages.",
+    "cosine-spearman": {
+      "mean": 0.5382978165254336,
+      "p_value": 1.9548905799051238e-104
+    }
+  },
+  "prompt3": {
+    "prompt_text": "Classify user passages.",
+    "cosine-spearman": {
+      "mean": 0.5995499718886601,
+      "p_value": 2.296294263689659e-135
+    }
+  },
+  "prompt4": {
+    "prompt_text": "Retrieve text that are semantically similar to the given text.",
+    "cosine-spearman": {
+      "mean": 0.8356199055015521,
+      "p_value": 0.0
+    }
+  },
+  "prompt5": {
+    "prompt_text": "Retrieve text based on user query.",
+    "cosine-spearman": {
+      "mean": 0.8540010297907198,
+      "p_value": 0.0
+    }
+  },
+  "prompt6": {
+    "prompt_text": "Retrieve semantically similar text.",
+    "cosine-spearman": {
+      "mean": 0.7804799058476729,
+      "p_value": 3.464574881880583e-283
+    }
+  },
+  "prompt7": {
+    "prompt_text": "Given a news summary, retrieve other semantically similar summaries.Retrieve parallel sentences.",
+    "cosine-spearman": {
+      "mean": 0.8255526989813436,
+      "p_value": 0.0
+    }
+  },
+  "prompt8": {
+    "prompt_text": "Retrieve the answer to the question.",
+    "cosine-spearman": {
+      "mean": 0.8447427783180527,
+      "p_value": 0.0
+    }
+  },
+  "prompt9": {
+    "prompt_text": "Identify the topic or theme of Reddit posts based on the titles.",
+    "cosine-spearman": {
+      "mean": 0.5135086141371205,
+      "p_value": 1.2354273647026212e-93
+    }
+  },
+  "prompt10": {
+    "prompt_text": "Identify the main and secondary category of Arxiv papers based on the titles.",
+    "cosine-spearman": {
+      "mean": 0.37048369691819105,
+      "p_value": 4.127020443210027e-46
+    }
+  },
+  "prompt11": {
+    "prompt_text": "Given a question, retrieve the passage that best answers it.",
+    "cosine-spearman": {
+      "mean": 0.8472873163275072,
+      "p_value": 0.0
+    }
+  },
+  "prompt12": {
+    "prompt_text": "Retrieve.",
+    "cosine-spearman": {
+      "mean": 0.857947475701848,
+      "p_value": 0.0
+    }
+  },
+  "prompt13": {
+    "prompt_text": "Find the most relevant passage that directly answers the question.",
+    "cosine-spearman": {
+      "mean": 0.8365754018616919,
+      "p_value": 0.0
+    }
+  },
+  "prompt14": {
+    "prompt_text": "Given a question, find a related document.",
+    "cosine-spearman": {
+      "mean": 0.8432485629498268,
+      "p_value": 0.0
+    }
+  },
+  "prompt15": {
+    "prompt_text": "Summarize the given paragraph into a short paragraph.",
+    "cosine-spearman": {
+      "mean": 0.8608770226159268,
+      "p_value": 0.0
+    }
+  },
+  "prompt16": {
+    "prompt_text": "Match the text to the short abstract.",
+    "cosine-spearman": {
+      "mean": 0.8289320861251946,
+      "p_value": 0.0
+    }
+  },
+  "prompt17": {
+    "prompt_text": "Retrieve a summary.",
+    "cosine-spearman": {
+      "mean": 0.8515203181467955,
+      "p_value": 0.0
+    }
+  },
+  "prompt18": {
+    "prompt_text": "Given the following brief summary, find the source document that contains the information it describes.",
+    "cosine-spearman": {
+      "mean": 0.8173462612449747,
+      "p_value": 0.0
+    }
+  },
+  "prompt19": {
+    "prompt_text": "Classify texts as entailment or contradiction.",
+    "cosine-spearman": {
+      "mean": 0.28069617467497193,
+      "p_value": 2.1946508750689815e-26
+    }
+  },
+  "prompt20": {
+    "prompt_text": "Determine whether the following two passages are contradictory, entailed, or neutral.",
+    "cosine-spearman": {
+      "mean": 0.623526059069007,
+      "p_value": 2.1465532203938244e-149
+    }
+  },
+  "prompt21": {
+    "prompt_text": "Classify based on semantic similarity.",
+    "cosine-spearman": {
+      "mean": 0.6868006733667514,
+      "p_value": 5.026301643047852e-193
+    }
+  },
+  "prompt22": {
+    "prompt_text": "Classify the following text into a meaningful cluster based on its content.",
+    "cosine-spearman": {
+      "mean": 0.6044458248114815,
+      "p_value": 3.91837455348671e-138
+    }
+  },
+  "prompt23": {
+    "prompt_text": "Group documents related to the same topic.",
+    "cosine-spearman": {
+      "mean": 0.8267185494513741,
+      "p_value": 0.0
+    }
+  },
+  "prompt24": {
+    "prompt_text": "Cluster.",
+    "cosine-spearman": {
+      "mean": 0.8350015680962551,
+      "p_value": 0.0
+    }
+  },
+  "prompt25": {
+    "prompt_text": "Retrieve a similar passage.",
+    "cosine-spearman": {
+      "mean": 0.8627642193840178,
+      "p_value": 0.0
+    }
+  },
+  "prompt26": {
+    "prompt_text": "Represent this sentence for a natural language understanding task.",
+    "cosine-spearman": {
+      "mean": 0.8107441604410957,
+      "p_value": 1.6e-322
+    }
+  },
+  "prompt27": {
+    "prompt_text": "Group passages based on semantic similarity.",
+    "cosine-spearman": {
+      "mean": 0.8234969614747227,
+      "p_value": 0.0
+    }
+  },
+  "prompt28": {
+    "prompt_text": "Retrieve duplicate questions from the forum.",
+    "cosine-spearman": {
+      "mean": 0.8554994636815524,
+      "p_value": 0.0
+    }
+  },
+  "prompt29": {
+    "prompt_text": "Retrieve the most relevant problem description for the given code implementation.",
+    "cosine-spearman": {
+      "mean": 0.8086469508797175,
+      "p_value": 1.433e-319
+    }
+  },
+  "prompt30": {
+    "prompt_text": "Rerank products by relevance to the e-commerce query.",
+    "cosine-spearman": {
+      "mean": 0.7662249026631003,
+      "p_value": 9.048634978888682e-267
+    }
+  },
+  "prompt31": {
+    "prompt_text": "Classify the sentiment of the given review as positive or negative.",
+    "cosine-spearman": {
+      "mean": 0.48422366327610145,
+      "p_value": 5.666468337840049e-82
+    }
+  },
+  "prompt32": {
+    "prompt_text": "Generate a creative story based on the prompt.",
+    "cosine-spearman": {
+      "mean": 0.7468248769638522,
+      "p_value": 3.1841612701311005e-246
+    }
+  },
+  "prompt33": {
+    "prompt_text": "Extract all named entities from the text and categorise them as PERSON, LOCATION, or ORGANIZATION.",
+    "cosine-spearman": {
+      "mean": 0.4246862441776014,
+      "p_value": 1.7101059047052046e-61
+    }
+  },
+  "prompt34": {
+    "prompt_text": "Search for related information.",
+    "cosine-spearman": {
+      "mean": 0.831192213660737,
+      "p_value": 0.0
+    }
+  },
+  "prompt35": {
+    "prompt_text": "Find documents related to the topic.",
+    "cosine-spearman": {
+      "mean": 0.8156658725592438,
+      "p_value": 0.0
+    }
+  },
+  "prompt36": {
+    "prompt_text": "Find something useful.",
+    "cosine-spearman": {
+      "mean": 0.8327282172130144,
+      "p_value": 0.0
+    }
+  },
+  "prompt37": {
+    "prompt_text": "Retrieve the passage that contains overlapping vocabulary with the source sentence.",
+    "cosine-spearman": {
+      "mean": 0.8465254978447709,
+      "p_value": 0.0
+    }
+  },
+  "prompt38": {
+    "prompt_text": "asdfjkl qpwoeiru zxcvbnm",
+    "cosine-spearman": {
+      "mean": 0.8482788274921494,
+      "p_value": 0.0
+    }
+  },
+  "prompt39": {
+    "prompt_text": "hgJKSbf oiawnef LKJHDS kdjfbs",
+    "cosine-spearman": {
+      "mean": 0.8066693716424735,
+      "p_value": 8.0261725e-317
+    }
+  },
+  "prompt40": {
+    "prompt_text": "!!!! ??? ### @@@",
+    "cosine-spearman": {
+      "mean": 0.8489598558786307,
+      "p_value": 0.0
+    }
+  },
+  "prompt41": {
+    "prompt_text": "Retrieve the corresponding translation.",
+    "cosine-spearman": {
+      "mean": 0.8503219418079615,
+      "p_value": 0.0
+    }
+  },
+  "prompt42": {
+    "prompt_text": "Given an English sentence, find its translation.",
+    "cosine-spearman": {
+      "mean": 0.8063320706632724,
+      "p_value": 2.34469504e-316
+    }
+  },
+  "prompt43": {
+    "prompt_text": "Retrieve parellel sentences.",
+    "cosine-spearman": {
+      "mean": 0.7630911443564942,
+      "p_value": 2.5644181566428823e-263
+    }
+  },
+  "prompt44": {
+    "prompt_text": "Translate.",
+    "cosine-spearman": {
+      "mean": 0.8412867056722966,
+      "p_value": 0.0
+    }
+  },
+  "prompt45": {
+    "prompt_text": "Find a sentence that has similar meaning.",
+    "cosine-spearman": {
+      "mean": 0.8290305754363572,
+      "p_value": 0.0
+    }
+  }
+}

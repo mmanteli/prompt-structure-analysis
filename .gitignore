@@ -1,13 +1,11 @@
-results*/
 test*.py
-dev*
-logs*
+dev
+logs
 old*
-prompt_eval*
-prompt_metrics*
-test*
-embeddings*
-finetuned_results*
+*_old
+embeddings_eval
+embeddings_struct
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

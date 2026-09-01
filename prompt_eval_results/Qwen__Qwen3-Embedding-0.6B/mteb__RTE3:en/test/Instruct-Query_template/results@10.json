@@ -1,0 +1,692 @@
+{
+  "prompt0": {
+    "prompt_text": "NO_PROMPT",
+    "cosine-spearman": {
+      "mean": 0.018028666830465896,
+      "p_value": 0.6929796296319661
+    },
+    "average_precision": {
+      "mean": 0.8737441359700697,
+      "standard_error": 0.019456433373174247,
+      "confidence_interval": [
+        0.8305368319967784,
+        0.9066070852106908
+      ]
+    }
+  },
+  "prompt1": {
+    "prompt_text": "EMPTY",
+    "cosine-spearman": {
+      "mean": 0.014389469581624752,
+      "p_value": 0.7526784058709863
+    },
+    "average_precision": {
+      "mean": 0.8751714884474066,
+      "standard_error": 0.017805364885769434,
+      "confidence_interval": [
+        0.835314060983146,
+        0.9052164041872841
+      ]
+    }
+  },
+  "prompt2": {
+    "prompt_text": "Identify categories in user passages.",
+    "cosine-spearman": {
+      "mean": 0.04224815196930523,
+      "p_value": 0.35468406833646127
+    },
+    "average_precision": {
+      "mean": 0.8613342563049635,
+      "standard_error": 0.02157023118378627,
+      "confidence_interval": [
+        0.8111015060465725,
+        0.8983004938288902
+      ]
+    }
+  },
+  "prompt3": {
+    "prompt_text": "Classify user passages.",
+    "cosine-spearman": {
+      "mean": 0.024930592647233588,
+      "p_value": 0.5850642993872323
+    },
+    "average_precision": {
+      "mean": 0.8583452406023724,
+      "standard_error": 0.022539295362866037,
+      "confidence_interval": [
+        0.805298752888663,
+        0.8949526187255513
+      ]
+    }
+  },
+  "prompt4": {
+    "prompt_text": "Retrieve text that are semantically similar to the given text.",
+    "cosine-spearman": {
+      "mean": 0.08972503561797993,
+      "p_value": 0.048984581665229246
+    },
+    "average_precision": {
+      "mean": 0.8823538381342991,
+      "standard_error": 0.01858056274865777,
+      "confidence_interval": [
+        0.8392734370075183,
+        0.913737257411842
+      ]
+    }
+  },
+  "prompt5": {
+    "prompt_text": "Retrieve text based on user query.",
+    "cosine-spearman": {
+      "mean": 0.00464311373128008,
+      "p_value": 0.9190161506134138
+    },
+    "average_precision": {
+      "mean": 0.8715757726436714,
+      "standard_error": 0.018276806098426086,
+      "confidence_interval": [
+        0.8274865061104972,
+        0.9013221542637125
+      ]
+    }
+  },
+  "prompt6": {
+    "prompt_text": "Retrieve semantically similar text.",
+    "cosine-spearman": {
+      "mean": 0.0971289196759671,
+      "p_value": 0.033013184464869665
+    },
+    "average_precision": {
+      "mean": 0.8821858020117324,
+      "standard_error": 0.020277851657096026,
+      "confidence_interval": [
+        0.8376918881924605,
+        0.9161028905574716
+      ]
+    }
+  },
+  "prompt7": {
+    "prompt_text": "Given a news summary, retrieve other semantically similar summaries.Retrieve parallel sentences.",
+    "cosine-spearman": {
+      "mean": 0.08809367133401665,
+      "p_value": 0.05326210953408494
+    },
+    "average_precision": {
+      "mean": 0.8846818904954701,
+      "standard_error": 0.018497213189727166,
+      "confidence_interval": [
+        0.8411411441111544,
+        0.9141093583015165
+      ]
+    }
+  },
+  "prompt8": {
+    "prompt_text": "Retrieve the answer to the question.",
+    "cosine-spearman": {
+      "mean": -0.013887511340405284,
+      "p_value": 0.7610392369993009
+    },
+    "average_precision": {
+      "mean": 0.8654827888411433,
+      "standard_error": 0.018683909799370013,
+      "confidence_interval": [
+        0.8255402374195456,
+        0.8976580499556672
+      ]
+    }
+  },
+  "prompt9": {
+    "prompt_text": "Identify the topic or theme of Reddit posts based on the titles.",
+    "cosine-spearman": {
+      "mean": 0.01430580987475484,
+      "p_value": 0.7540699006781093
+    },
+    "average_precision": {
+      "mean": 0.8478786943786941,
+      "standard_error": 0.02297994592924618,
+      "confidence_interval": [
+        0.7946431563340662,
+        0.8868719478953394
+      ]
+    }
+  },
+  "prompt10": {
+    "prompt_text": "Identify the main and secondary category of Arxiv papers based on the titles.",
+    "cosine-spearman": {
+      "mean": 0.03593184410062693,
+      "p_value": 0.43123998783056794
+    },
+    "average_precision": {
+      "mean": 0.8650081379234431,
+      "standard_error": 0.021150385154709652,
+      "confidence_interval": [
+        0.8117801463561283,
+        0.8990517685098557
+      ]
+    }
+  },
+  "prompt11": {
+    "prompt_text": "Given a question, retrieve the passage that best answers it.",
+    "cosine-spearman": {
+      "mean": -0.004475794317540257,
+      "p_value": 0.921925010305418
+    },
+    "average_precision": {
+      "mean": 0.8649929217990654,
+      "standard_error": 0.019500657415470402,
+      "confidence_interval": [
+        0.8184602454994675,
+        0.895732271245655
+      ]
+    }
+  },
+  "prompt12": {
+    "prompt_text": "Retrieve.",
+    "cosine-spearman": {
+      "mean": 0.02233714173426633,
+      "p_value": 0.6247082679469976
+    },
+    "average_precision": {
+      "mean": 0.8781356003637685,
+      "standard_error": 0.01720416805314677,
+      "confidence_interval": [
+        0.8390264584043683,
+        0.9071997663471013
+      ]
+    }
+  },
+  "prompt13": {
+    "prompt_text": "Find the most relevant passage that directly answers the question.",
+    "cosine-spearman": {
+      "mean": -0.026478297224326944,
+      "p_value": 0.5619752799192453
+    },
+    "average_precision": {
+      "mean": 0.8601543814833108,
+      "standard_error": 0.02008774145467918,
+      "confidence_interval": [
+        0.8109796307775512,
+        0.8942047305291501
+      ]
+    }
+  },
+  "prompt14": {
+    "prompt_text": "Given a question, find a related document.",
+    "cosine-spearman": {
+      "mean": -0.014849597969409266,
+      "p_value": 0.7450396080295394
+    },
+    "average_precision": {
+      "mean": 0.8597283638526432,
+      "standard_error": 0.02008045296248174,
+      "confidence_interval": [
+        0.8143055364645894,
+        0.8936697860928953
+      ]
+    }
+  },
+  "prompt15": {
+    "prompt_text": "Summarize the given paragraph into a short paragraph.",
+    "cosine-spearman": {
+      "mean": 0.02693842561211146,
+      "p_value": 0.5551966156009506
+    },
+    "average_precision": {
+      "mean": 0.8767591302325043,
+      "standard_error": 0.018295604551809324,
+      "confidence_interval": [
+        0.8394587933348959,
+        0.9121053110880053
+      ]
+    }
+  },
+  "prompt16": {
+    "prompt_text": "Match the text to the short abstract.",
+    "cosine-spearman": {
+      "mean": -0.01702475034802696,
+      "p_value": 0.7092776547270734
+    },
+    "average_precision": {
+      "mean": 0.8634609229080145,
+      "standard_error": 0.019319601856833492,
+      "confidence_interval": [
+        0.8188667960194708,
+        0.895659448524125
+      ]
+    }
+  },
+  "prompt17": {
+    "prompt_text": "Retrieve a summary.",
+    "cosine-spearman": {
+      "mean": 0.004810433145019903,
+      "p_value": 0.9161083709483133
+    },
+    "average_precision": {
+      "mean": 0.8716760630425091,
+      "standard_error": 0.01807672313704691,
+      "confidence_interval": [
+        0.8300301625183291,
+        0.9017470345351845
+      ]
+    }
+  },
+  "prompt18": {
+    "prompt_text": "Given the following brief summary, find the source document that contains the information it describes.",
+    "cosine-spearman": {
+      "mean": -0.04007299959068754,
+      "p_value": 0.3800246195777992
+    },
+    "average_precision": {
+      "mean": 0.8569004920021297,
+      "standard_error": 0.02081259964881583,
+      "confidence_interval": [
+        0.8066317602592061,
+        0.8896468938533542
+      ]
+    }
+  },
+  "prompt19": {
+    "prompt_text": "Classify texts as entailment or contradiction.",
+    "cosine-spearman": {
+      "mean": -0.05458795873261715,
+      "p_value": 0.23160619361230877
+    },
+    "average_precision": {
+      "mean": 0.828841184952516,
+      "standard_error": 0.023947841858904514,
+      "confidence_interval": [
+        0.7727924356562794,
+        0.8668429360650122
+      ]
+    }
+  },
+  "prompt20": {
+    "prompt_text": "Determine whether the following two passages are contradictory, entailed, or neutral.",
+    "cosine-spearman": {
+      "mean": -0.04588734921814638,
+      "p_value": 0.31472949400658856
+    },
+    "average_precision": {
+      "mean": 0.8472221291171069,
+      "standard_error": 0.022096072376319296,
+      "confidence_interval": [
+        0.7928982329767209,
+        0.8832624105644452
+      ]
+    }
+  },
+  "prompt21": {
+    "prompt_text": "Classify based on semantic similarity.",
+    "cosine-spearman": {
+      "mean": 0.0046849435847150355,
+      "p_value": 0.918289102940013
+    },
+    "average_precision": {
+      "mean": 0.8604462832809099,
+      "standard_error": 0.020867978255653334,
+      "confidence_interval": [
+        0.8106987813671571,
+        0.8938223024590298
+      ]
+    }
+  },
+  "prompt22": {
+    "prompt_text": "Classify the following text into a meaningful cluster based on its content.",
+    "cosine-spearman": {
+      "mean": 0.017443048882376515,
+      "p_value": 0.7024701701381995
+    },
+    "average_precision": {
+      "mean": 0.8574823618040079,
+      "standard_error": 0.02214886330355509,
+      "confidence_interval": [
+        0.8050541719453937,
+        0.8938131151671539
+      ]
+    }
+  },
+  "prompt23": {
+    "prompt_text": "Group documents related to the same topic.",
+    "cosine-spearman": {
+      "mean": -0.020329308769388457,
+      "p_value": 0.6561702138940553
+    },
+    "average_precision": {
+      "mean": 0.8605425377040719,
+      "standard_error": 0.020788090991519046,
+      "confidence_interval": [
+        0.815598672825831,
+        0.8962215517084989
+      ]
+    }
+  },
+  "prompt24": {
+    "prompt_text": "Cluster.",
+    "cosine-spearman": {
+      "mean": -0.0062326483287846205,
+      "p_value": 0.8914412750138607
+    },
+    "average_precision": {
+      "mean": 0.8683055746656888,
+      "standard_error": 0.019288858765887023,
+      "confidence_interval": [
+        0.8264681704407514,
+        0.9011114769906879
+      ]
+    }
+  },
+  "prompt25": {
+    "prompt_text": "Retrieve a similar passage.",
+    "cosine-spearman": {
+      "mean": 0.07675778105314368,
+      "p_value": 0.09231951374942254
+    },
+    "average_precision": {
+      "mean": 0.8820209510296672,
+      "standard_error": 0.01872034858191857,
+      "confidence_interval": [
+        0.83793836193657,
+        0.9147005274646438
+      ]
+    }
+  },
+  "prompt26": {
+    "prompt_text": "Represent this sentence for a natural language understanding task.",
+    "cosine-spearman": {
+      "mean": 0.048229821010503895,
+      "p_value": 0.29063607243384965
+    },
+    "average_precision": {
+      "mean": 0.8778090786813986,
+      "standard_error": 0.01857459084984788,
+      "confidence_interval": [
+        0.83566207989291,
+        0.9082824374905574
+      ]
+    }
+  },
+  "prompt27": {
+    "prompt_text": "Group passages based on semantic similarity.",
+    "cosine-spearman": {
+      "mean": 0.00715290493737742,
+      "p_value": 0.8755343300450517
+    },
+    "average_precision": {
+      "mean": 0.8702903708571369,
+      "standard_error": 0.018777289372808797,
+      "confidence_interval": [
+        0.8278897253992716,
+        0.902212552812792
+      ]
+    }
+  },
+  "prompt28": {
+    "prompt_text": "Retrieve duplicate questions from the forum.",
+    "cosine-spearman": {
+      "mean": -0.003471877835101321,
+      "p_value": 0.9393986878646013
+    },
+    "average_precision": {
+      "mean": 0.865407163564353,
+      "standard_error": 0.019277735411201785,
+      "confidence_interval": [
+        0.8167448842234212,
+        0.8950118412845678
+      ]
+    }
+  },
+  "prompt29": {
+    "prompt_text": "Retrieve the most relevant problem description for the given code implementation.",
+    "cosine-spearman": {
+      "mean": -0.02003649979534377,
+      "p_value": 0.660811392046706
+    },
+    "average_precision": {
+      "mean": 0.8562962595655301,
+      "standard_error": 0.020973450223822757,
+      "confidence_interval": [
+        0.8103429999422694,
+        0.8925332687923214
+      ]
+    }
+  },
+  "prompt30": {
+    "prompt_text": "Rerank products by relevance to the e-commerce query.",
+    "cosine-spearman": {
+      "mean": -0.04224815196930523,
+      "p_value": 0.35468406833646127
+    },
+    "average_precision": {
+      "mean": 0.85197719075396,
+      "standard_error": 0.020834767104816545,
+      "confidence_interval": [
+        0.8070389759945523,
+        0.8881153177190226
+      ]
+    }
+  },
+  "prompt31": {
+    "prompt_text": "Classify the sentiment of the given review as positive or negative.",
+    "cosine-spearman": {
+      "mean": 0.009118908048820337,
+      "p_value": 0.8417266408409598
+    },
+    "average_precision": {
+      "mean": 0.8629275431468945,
+      "standard_error": 0.020506973939445523,
+      "confidence_interval": [
+        0.8193684322059135,
+        0.8995581029017238
+      ]
+    }
+  },
+  "prompt32": {
+    "prompt_text": "Generate a creative story based on the prompt.",
+    "cosine-spearman": {
+      "mean": -0.06387418619517732,
+      "p_value": 0.16147898223045315
+    },
+    "average_precision": {
+      "mean": 0.8413857310348626,
+      "standard_error": 0.02152475769591318,
+      "confidence_interval": [
+        0.79526940793852,
+        0.8800153926716594
+      ]
+    }
+  },
+  "prompt33": {
+    "prompt_text": "Extract all named entities from the text and categorise them as PERSON, LOCATION, or ORGANIZATION.",
+    "cosine-spearman": {
+      "mean": -0.07207283746842863,
+      "p_value": 0.11404500007552776
+    },
+    "average_precision": {
+      "mean": 0.8356609899565678,
+      "standard_error": 0.02161105251494567,
+      "confidence_interval": [
+        0.7890423070361975,
+        0.8750877346789747
+      ]
+    }
+  },
+  "prompt34": {
+    "prompt_text": "Search for related information.",
+    "cosine-spearman": {
+      "mean": -0.014222150167884931,
+      "p_value": 0.7554621919220008
+    },
+    "average_precision": {
+      "mean": 0.8621598703867721,
+      "standard_error": 0.019785094679894966,
+      "confidence_interval": [
+        0.8152417297673393,
+        0.8950839146475793
+      ]
+    }
+  },
+  "prompt35": {
+    "prompt_text": "Find documents related to the topic.",
+    "cosine-spearman": {
+      "mean": -0.03442596937696852,
+      "p_value": 0.45080958756111955
+    },
+    "average_precision": {
+      "mean": 0.8553205353098552,
+      "standard_error": 0.020825605148293087,
+      "confidence_interval": [
+        0.8105463000448468,
+        0.8922750779930201
+      ]
+    }
+  },
+  "prompt36": {
+    "prompt_text": "Find something useful.",
+    "cosine-spearman": {
+      "mean": -0.011586869401482723,
+      "p_value": 0.7997026677806913
+    },
+    "average_precision": {
+      "mean": 0.8649773981618152,
+      "standard_error": 0.020221882752258724,
+      "confidence_interval": [
+        0.8201570963111002,
+        0.8988924387559593
+      ]
+    }
+  },
+  "prompt37": {
+    "prompt_text": "Retrieve the passage that contains overlapping vocabulary with the source sentence.",
+    "cosine-spearman": {
+      "mean": 0.05299842430208884,
+      "p_value": 0.2454999925384185
+    },
+    "average_precision": {
+      "mean": 0.8802070844705663,
+      "standard_error": 0.01850508201411155,
+      "confidence_interval": [
+        0.8379095047683225,
+        0.9107525945068612
+      ]
+    }
+  },
+  "prompt38": {
+    "prompt_text": "asdfjkl qpwoeiru zxcvbnm",
+    "cosine-spearman": {
+      "mean": 0.0016313642839632712,
+      "p_value": 0.97150337919234
+    },
+    "average_precision": {
+      "mean": 0.869127205454543,
+      "standard_error": 0.018092428110194066,
+      "confidence_interval": [
+        0.8304409650061443,
+        0.8999479050745627
+      ]
+    }
+  },
+  "prompt39": {
+    "prompt_text": "hgJKSbf oiawnef LKJHDS kdjfbs",
+    "cosine-spearman": {
+      "mean": -0.020454798329693328,
+      "p_value": 0.6541851671376006
+    },
+    "average_precision": {
+      "mean": 0.8619837917972952,
+      "standard_error": 0.020060524824555486,
+      "confidence_interval": [
+        0.8141390583239765,
+        0.8961006785458978
+      ]
+    }
+  },
+  "prompt40": {
+    "prompt_text": "!!!! ??? ### @@@",
+    "cosine-spearman": {
+      "mean": 0.009913675264084496,
+      "p_value": 0.8281382198132823
+    },
+    "average_precision": {
+      "mean": 0.8693607403628769,
+      "standard_error": 0.018663411707012474,
+      "confidence_interval": [
+        0.8260770570053843,
+        0.9001524108556376
+      ]
+    }
+  },
+  "prompt41": {
+    "prompt_text": "Retrieve the corresponding translation.",
+    "cosine-spearman": {
+      "mean": 0.05249646606086937,
+      "p_value": 0.2500061706176041
+    },
+    "average_precision": {
+      "mean": 0.8824803885106345,
+      "standard_error": 0.017303288217729716,
+      "confidence_interval": [
+        0.8460849456424244,
+        0.9141591483088018
+      ]
+    }
+  },
+  "prompt42": {
+    "prompt_text": "Given an English sentence, find its translation.",
+    "cosine-spearman": {
+      "mean": 0.03028481388690791,
+      "p_value": 0.5071296626698503
+    },
+    "average_precision": {
+      "mean": 0.8754024205093835,
+      "standard_error": 0.017980257259707456,
+      "confidence_interval": [
+        0.8359265507112618,
+        0.9079663944904681
+      ]
+    }
+  },
+  "prompt43": {
+    "prompt_text": "Retrieve parellel sentences.",
+    "cosine-spearman": {
+      "mean": 0.03379852157544418,
+      "p_value": 0.45910920491225937
+    },
+    "average_precision": {
+      "mean": 0.8735644524001197,
+      "standard_error": 0.019015668178743002,
+      "confidence_interval": [
+        0.8313881173433036,
+        0.9046983907478858
+      ]
+    }
+  },
+  "prompt44": {
+    "prompt_text": "Translate.",
+    "cosine-spearman": {
+      "mean": 0.054253319905137515,
+      "p_value": 0.234483930794514
+    },
+    "average_precision": {
+      "mean": 0.8836241761351157,
+      "standard_error": 0.017331200784070976,
+      "confidence_interval": [
+        0.8478937679986034,
+        0.915022433364671
+      ]
+    }
+  },
+  "prompt45": {
+    "prompt_text": "Find a sentence that has similar meaning.",
+    "cosine-spearman": {
+      "mean": 0.06399967575548218,
+      "p_value": 0.16065529922915503
+    },
+    "average_precision": {
+      "mean": 0.8811534882525223,
+      "standard_error": 0.0176648609945378,
+      "confidence_interval": [
+        0.8365906613628803,
+        0.9089488320521869
+      ]
+    }
+  }
+}

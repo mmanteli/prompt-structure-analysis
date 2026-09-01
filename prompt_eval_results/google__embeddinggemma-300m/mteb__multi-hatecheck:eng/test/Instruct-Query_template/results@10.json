@@ -1,0 +1,1152 @@
+{
+  "prompt0": {
+    "prompt_text": "NO_PROMPT",
+    "V-score": {
+      "mean": 0.0008950369495532687,
+      "standard_error": 0.0009378235610024506,
+      "confidence_interval": [
+        2.618261520729958e-05,
+        0.00329503434361743
+      ]
+    },
+    "AMI": {
+      "mean": 0.0006903984713642127
+    },
+    "Accuracy": {
+      "mean": 0.8350321888412017,
+      "standard_error": 0.006175089384047816,
+      "confidence_interval": [
+        0.8229716661784541,
+        0.8471030042918455
+      ]
+    },
+    "F1": {
+      "mean": 0.8350321888412017
+    }
+  },
+  "prompt1": {
+    "prompt_text": "EMPTY",
+    "V-score": {
+      "mean": 0.014047153412772802,
+      "standard_error": 0.003511098027460005,
+      "confidence_interval": [
+        0.007883076880231099,
+        0.021775423957833006
+      ]
+    },
+    "AMI": {
+      "mean": 0.013845773973978416
+    },
+    "Accuracy": {
+      "mean": 0.8208154506437768,
+      "standard_error": 0.006389650497111979,
+      "confidence_interval": [
+        0.8082081545064378,
+        0.8333913496824431
+      ]
+    },
+    "F1": {
+      "mean": 0.8208154506437768
+    }
+  },
+  "prompt2": {
+    "prompt_text": "Identify categories in user passages.",
+    "V-score": {
+      "mean": 0.007354084571985043,
+      "standard_error": 0.0025272186515005244,
+      "confidence_interval": [
+        0.003372541852175395,
+        0.013396616714458633
+      ]
+    },
+    "AMI": {
+      "mean": 0.007143348597922707
+    },
+    "Accuracy": {
+      "mean": 0.802038626609442,
+      "standard_error": 0.006612615922659833,
+      "confidence_interval": [
+        0.789431330472103,
+        0.8149382957595644
+      ]
+    },
+    "F1": {
+      "mean": 0.802038626609442
+    }
+  },
+  "prompt3": {
+    "prompt_text": "Classify user passages.",
+    "V-score": {
+      "mean": 0.003773423605593599,
+      "standard_error": 0.0019641122939607477,
+      "confidence_interval": [
+        0.000758611641945871,
+        0.008066109039179406
+      ]
+    },
+    "AMI": {
+      "mean": 0.003494773824754099
+    },
+    "Accuracy": {
+      "mean": 0.7902360515021459,
+      "standard_error": 0.006549194941330467,
+      "confidence_interval": [
+        0.7781652360515021,
+        0.8031115879828327
+      ]
+    },
+    "F1": {
+      "mean": 0.7902360515021459
+    }
+  },
+  "prompt4": {
+    "prompt_text": "Retrieve text that are semantically similar to the given text.",
+    "V-score": {
+      "mean": 0.003458093358480379,
+      "standard_error": 0.0020014387500158905,
+      "confidence_interval": [
+        0.0007491231602201782,
+        0.008694493178467702
+      ]
+    },
+    "AMI": {
+      "mean": 0.0031809988227026495
+    },
+    "Accuracy": {
+      "mean": 0.8071351931330472,
+      "standard_error": 0.006494041123641251,
+      "confidence_interval": [
+        0.7929651374018888,
+        0.818401287553648
+      ]
+    },
+    "F1": {
+      "mean": 0.8071351931330472
+    }
+  },
+  "prompt5": {
+    "prompt_text": "Retrieve text based on user query.",
+    "V-score": {
+      "mean": 0.0035844638064212292,
+      "standard_error": 0.001956607089993594,
+      "confidence_interval": [
+        0.0007162122722756997,
+        0.00787669012029044
+      ]
+    },
+    "AMI": {
+      "mean": 0.0033077281370908307
+    },
+    "Accuracy": {
+      "mean": 0.8106223175965666,
+      "standard_error": 0.0064207379163165245,
+      "confidence_interval": [
+        0.7980150214592274,
+        0.8224352312589218
+      ]
+    },
+    "F1": {
+      "mean": 0.8106223175965666
+    }
+  },
+  "prompt6": {
+    "prompt_text": "Retrieve semantically similar text.",
+    "V-score": {
+      "mean": 0.003271794707446956,
+      "standard_error": 0.0019187969395890662,
+      "confidence_interval": [
+        0.000582019355412282,
+        0.0073765691663139205
+      ]
+    },
+    "AMI": {
+      "mean": 0.0029941595779891606
+    },
+    "Accuracy": {
+      "mean": 0.7921137339055794,
+      "standard_error": 0.006683895751957582,
+      "confidence_interval": [
+        0.7792381974248928,
+        0.8052575107296137
+      ]
+    },
+    "F1": {
+      "mean": 0.7921137339055794
+    }
+  },
+  "prompt7": {
+    "prompt_text": "Given a news summary, retrieve other semantically similar summaries.Retrieve parallel sentences.",
+    "V-score": {
+      "mean": 0.003439717539170332,
+      "standard_error": 0.0019848949577186818,
+      "confidence_interval": [
+        0.0007762608942519909,
+        0.007882406828544788
+      ]
+    },
+    "AMI": {
+      "mean": 0.0031619654619315153
+    },
+    "Accuracy": {
+      "mean": 0.7921137339055794,
+      "standard_error": 0.006552778272972142,
+      "confidence_interval": [
+        0.7794671667007249,
+        0.8045447727323423
+      ]
+    },
+    "F1": {
+      "mean": 0.7921137339055794
+    }
+  },
+  "prompt8": {
+    "prompt_text": "Retrieve the answer to the question.",
+    "V-score": {
+      "mean": 0.0028734372548800016,
+      "standard_error": 0.0015515777067861712,
+      "confidence_interval": [
+        0.0005741720047966643,
+        0.006120767480502848
+      ]
+    },
+    "AMI": {
+      "mean": 0.002669487335130992
+    },
+    "Accuracy": {
+      "mean": 0.8299356223175965,
+      "standard_error": 0.006210256167188878,
+      "confidence_interval": [
+        0.8178648068669528,
+        0.8425429184549357
+      ]
+    },
+    "F1": {
+      "mean": 0.8299356223175965
+    }
+  },
+  "prompt9": {
+    "prompt_text": "Identify the topic or theme of Reddit posts based on the titles.",
+    "V-score": {
+      "mean": 0.0031306569092898542,
+      "standard_error": 0.0018870845665779504,
+      "confidence_interval": [
+        0.0004682067378606891,
+        0.007202534815180022
+      ]
+    },
+    "AMI": {
+      "mean": 0.00285199361373805
+    },
+    "Accuracy": {
+      "mean": 0.8052575107296137,
+      "standard_error": 0.006339007155116919,
+      "confidence_interval": [
+        0.7930076772875576,
+        0.8168766134472784
+      ]
+    },
+    "F1": {
+      "mean": 0.8052575107296137
+    }
+  },
+  "prompt10": {
+    "prompt_text": "Identify the main and secondary category of Arxiv papers based on the titles.",
+    "V-score": {
+      "mean": 0.003602546437425514,
+      "standard_error": 0.0019564855010184667,
+      "confidence_interval": [
+        0.0006711794334087591,
+        0.00806683386399357
+      ]
+    },
+    "AMI": {
+      "mean": 0.003326458417389578
+    },
+    "Accuracy": {
+      "mean": 0.7749463519313304,
+      "standard_error": 0.006675306511561218,
+      "confidence_interval": [
+        0.7623473848411032,
+        0.7878218884120172
+      ]
+    },
+    "F1": {
+      "mean": 0.7749463519313304
+    }
+  },
+  "prompt11": {
+    "prompt_text": "Given a question, retrieve the passage that best answers it.",
+    "V-score": {
+      "mean": 0.0030490406829279597,
+      "standard_error": 0.0018685611014169878,
+      "confidence_interval": [
+        0.0006097923663681361,
+        0.007348154503727651
+      ]
+    },
+    "AMI": {
+      "mean": 0.0027713435061215434
+    },
+    "Accuracy": {
+      "mean": 0.7953326180257511,
+      "standard_error": 0.006373064454862885,
+      "confidence_interval": [
+        0.782725321888412,
+        0.8076716738197425
+      ]
+    },
+    "F1": {
+      "mean": 0.7953326180257511
+    }
+  },
+  "prompt12": {
+    "prompt_text": "Retrieve.",
+    "V-score": {
+      "mean": 0.0032296006126520246,
+      "standard_error": 0.0018834813087716812,
+      "confidence_interval": [
+        0.0005700793121492929,
+        0.007846381944131056
+      ]
+    },
+    "AMI": {
+      "mean": 0.0029524425430771588
+    },
+    "Accuracy": {
+      "mean": 0.8272532188841202,
+      "standard_error": 0.006208492017067083,
+      "confidence_interval": [
+        0.8151824034334764,
+        0.8385193133047211
+      ]
+    },
+    "F1": {
+      "mean": 0.8272532188841202
+    }
+  },
+  "prompt13": {
+    "prompt_text": "Find the most relevant passage that directly answers the question.",
+    "V-score": {
+      "mean": 0.003712543871840338,
+      "standard_error": 0.0020295554329307084,
+      "confidence_interval": [
+        0.0008618714083639058,
+        0.008753187078325906
+      ]
+    },
+    "AMI": {
+      "mean": 0.003436165851217224
+    },
+    "Accuracy": {
+      "mean": 0.8151824034334764,
+      "standard_error": 0.006419060848417914,
+      "confidence_interval": [
+        0.802843347639485,
+        0.828183867542094
+      ]
+    },
+    "F1": {
+      "mean": 0.8151824034334764
+    }
+  },
+  "prompt14": {
+    "prompt_text": "Given a question, find a related document.",
+    "V-score": {
+      "mean": 0.003907819259243707,
+      "standard_error": 0.0020866790197448964,
+      "confidence_interval": [
+        0.0009251046689206995,
+        0.00881549786515173
+      ]
+    },
+    "AMI": {
+      "mean": 0.0036319754392492272
+    },
+    "Accuracy": {
+      "mean": 0.7795064377682404,
+      "standard_error": 0.0067598932716451295,
+      "confidence_interval": [
+        0.7655579399141631,
+        0.7921137339055794
+      ]
+    },
+    "F1": {
+      "mean": 0.7795064377682404
+    }
+  },
+  "prompt15": {
+    "prompt_text": "Summarize the given paragraph into a short paragraph.",
+    "V-score": {
+      "mean": 0.0074077711595374116,
+      "standard_error": 0.0025522389383788677,
+      "confidence_interval": [
+        0.00347612677085804,
+        0.013802573081706144
+      ]
+    },
+    "AMI": {
+      "mean": 0.007173903155691781
+    },
+    "Accuracy": {
+      "mean": 0.8315450643776824,
+      "standard_error": 0.0061092576412352315,
+      "confidence_interval": [
+        0.8197424892703863,
+        0.8429139586383527
+      ]
+    },
+    "F1": {
+      "mean": 0.8315450643776824
+    }
+  },
+  "prompt16": {
+    "prompt_text": "Match the text to the short abstract.",
+    "V-score": {
+      "mean": 0.005397900013288912,
+      "standard_error": 0.00214217333416297,
+      "confidence_interval": [
+        0.001955724202521148,
+        0.010686283614420974
+      ]
+    },
+    "AMI": {
+      "mean": 0.005194266812773252
+    },
+    "Accuracy": {
+      "mean": 0.8285944206008584,
+      "standard_error": 0.006244904355922625,
+      "confidence_interval": [
+        0.8157188841201717,
+        0.8401287553648069
+      ]
+    },
+    "F1": {
+      "mean": 0.8285944206008584
+    }
+  },
+  "prompt17": {
+    "prompt_text": "Retrieve a summary.",
+    "V-score": {
+      "mean": 0.0032105756983317195,
+      "standard_error": 0.0019014895463796782,
+      "confidence_interval": [
+        0.000507354705250979,
+        0.007308869417703919
+      ]
+    },
+    "AMI": {
+      "mean": 0.0029327597567954835
+    },
+    "Accuracy": {
+      "mean": 0.8261802575107297,
+      "standard_error": 0.006289700834483392,
+      "confidence_interval": [
+        0.8135729613733905,
+        0.8377145922746781
+      ]
+    },
+    "F1": {
+      "mean": 0.8261802575107297
+    }
+  },
+  "prompt18": {
+    "prompt_text": "Given the following brief summary, find the source document that contains the information it describes.",
+    "V-score": {
+      "mean": 0.0034846869723707866,
+      "standard_error": 0.0019602636724659734,
+      "confidence_interval": [
+        0.000718837060945604,
+        0.007974739066998991
+      ]
+    },
+    "AMI": {
+      "mean": 0.00320645380569371
+    },
+    "Accuracy": {
+      "mean": 0.7972103004291845,
+      "standard_error": 0.006644295114495103,
+      "confidence_interval": [
+        0.7837410383421658,
+        0.8106223175965666
+      ]
+    },
+    "F1": {
+      "mean": 0.7972103004291845
+    }
+  },
+  "prompt19": {
+    "prompt_text": "Classify texts as entailment or contradiction.",
+    "V-score": {
+      "mean": 0.004555273278844494,
+      "standard_error": 0.002134301723626301,
+      "confidence_interval": [
+        0.0011057748921976275,
+        0.00913473249779139
+      ]
+    },
+    "AMI": {
+      "mean": 0.004279926592571549
+    },
+    "Accuracy": {
+      "mean": 0.8138412017167382,
+      "standard_error": 0.006355687747125541,
+      "confidence_interval": [
+        0.8015914774128544,
+        0.8261802575107297
+      ]
+    },
+    "F1": {
+      "mean": 0.8138412017167382
+    }
+  },
+  "prompt20": {
+    "prompt_text": "Determine whether the following two passages are contradictory, entailed, or neutral.",
+    "V-score": {
+      "mean": 0.003794774024047546,
+      "standard_error": 0.002065926859991575,
+      "confidence_interval": [
+        0.0007492824000964391,
+        0.00860423302907182
+      ]
+    },
+    "AMI": {
+      "mean": 0.003519216978581267
+    },
+    "Accuracy": {
+      "mean": 0.8175965665236051,
+      "standard_error": 0.006309656427152056,
+      "confidence_interval": [
+        0.8047210300429185,
+        0.828862660944206
+      ]
+    },
+    "F1": {
+      "mean": 0.8175965665236051
+    }
+  },
+  "prompt21": {
+    "prompt_text": "Classify based on semantic similarity.",
+    "V-score": {
+      "mean": 0.0038566467281579415,
+      "standard_error": 0.0020819286927064883,
+      "confidence_interval": [
+        0.0009849824868613753,
+        0.008892899861650108
+      ]
+    },
+    "AMI": {
+      "mean": 0.0035788467880774203
+    },
+    "Accuracy": {
+      "mean": 0.8052575107296137,
+      "standard_error": 0.006350154968598769,
+      "confidence_interval": [
+        0.7918454935622318,
+        0.8165357951981355
+      ]
+    },
+    "F1": {
+      "mean": 0.8052575107296137
+    }
+  },
+  "prompt22": {
+    "prompt_text": "Classify the following text into a meaningful cluster based on its content.",
+    "V-score": {
+      "mean": 0.004246409451349859,
+      "standard_error": 0.0022448313547218175,
+      "confidence_interval": [
+        0.0010805516490300672,
+        0.009448404085479947
+      ]
+    },
+    "AMI": {
+      "mean": 0.003969045797394772
+    },
+    "Accuracy": {
+      "mean": 0.805793991416309,
+      "standard_error": 0.006382425272245678,
+      "confidence_interval": [
+        0.7922489512943608,
+        0.8175965665236051
+      ]
+    },
+    "F1": {
+      "mean": 0.805793991416309
+    }
+  },
+  "prompt23": {
+    "prompt_text": "Group documents related to the same topic.",
+    "V-score": {
+      "mean": 0.007258380977455995,
+      "standard_error": 0.0025369032906013443,
+      "confidence_interval": [
+        0.0032714761603522863,
+        0.012666288235311175
+      ]
+    },
+    "AMI": {
+      "mean": 0.007026374484869631
+    },
+    "Accuracy": {
+      "mean": 0.8001609442060086,
+      "standard_error": 0.006315820482314269,
+      "confidence_interval": [
+        0.7872854077253219,
+        0.8116952789699571
+      ]
+    },
+    "F1": {
+      "mean": 0.8001609442060086
+    }
+  },
+  "prompt24": {
+    "prompt_text": "Cluster.",
+    "V-score": {
+      "mean": 0.003089476854364123,
+      "standard_error": 0.0018752265327076085,
+      "confidence_interval": [
+        0.0004293865343991499,
+        0.007324519258353539
+      ]
+    },
+    "AMI": {
+      "mean": 0.00281129836374318
+    },
+    "Accuracy": {
+      "mean": 0.7872854077253219,
+      "standard_error": 0.006777217655010135,
+      "confidence_interval": [
+        0.7739107999903476,
+        0.7993562231759657
+      ]
+    },
+    "F1": {
+      "mean": 0.7872854077253219
+    }
+  },
+  "prompt25": {
+    "prompt_text": "Retrieve a similar passage.",
+    "V-score": {
+      "mean": 0.00363042875869812,
+      "standard_error": 0.0020792958383747894,
+      "confidence_interval": [
+        0.0007810769454040648,
+        0.008487211948518666
+      ]
+    },
+    "AMI": {
+      "mean": 0.0033532196774495094
+    },
+    "Accuracy": {
+      "mean": 0.8098175965665236,
+      "standard_error": 0.006201028642606611,
+      "confidence_interval": [
+        0.7982642084361966,
+        0.8223114825030746
+      ]
+    },
+    "F1": {
+      "mean": 0.8098175965665236
+    }
+  },
+  "prompt26": {
+    "prompt_text": "Represent this sentence for a natural language understanding task.",
+    "V-score": {
+      "mean": 0.003712543871840338,
+      "standard_error": 0.001998271433123875,
+      "confidence_interval": [
+        0.0008702960183291472,
+        0.008760051587470898
+      ]
+    },
+    "AMI": {
+      "mean": 0.003436165851217224
+    },
+    "Accuracy": {
+      "mean": 0.8023068669527897,
+      "standard_error": 0.006488602369873596,
+      "confidence_interval": [
+        0.7903796662552365,
+        0.8155435292843638
+      ]
+    },
+    "F1": {
+      "mean": 0.8023068669527897
+    }
+  },
+  "prompt27": {
+    "prompt_text": "Group passages based on semantic similarity.",
+    "V-score": {
+      "mean": 0.004141398813768521,
+      "standard_error": 0.0021368750083758767,
+      "confidence_interval": [
+        0.0009180962946630558,
+        0.008793307694790527
+      ]
+    },
+    "AMI": {
+      "mean": 0.0038649789921497845
+    },
+    "Accuracy": {
+      "mean": 0.8079399141630901,
+      "standard_error": 0.00645160348559064,
+      "confidence_interval": [
+        0.7950643776824035,
+        0.8210836909871244
+      ]
+    },
+    "F1": {
+      "mean": 0.8079399141630901
+    }
+  },
+  "prompt28": {
+    "prompt_text": "Retrieve duplicate questions from the forum.",
+    "V-score": {
+      "mean": 0.003773423605593599,
+      "standard_error": 0.0020978210150410822,
+      "confidence_interval": [
+        0.0007738697733546395,
+        0.008825059845089259
+      ]
+    },
+    "AMI": {
+      "mean": 0.003494773824754099
+    },
+    "Accuracy": {
+      "mean": 0.7851394849785408,
+      "standard_error": 0.0067715515655051,
+      "confidence_interval": [
+        0.771848008021394,
+        0.7982832618025751
+      ]
+    },
+    "F1": {
+      "mean": 0.7851394849785408
+    }
+  },
+  "prompt29": {
+    "prompt_text": "Retrieve the most relevant problem description for the given code implementation.",
+    "V-score": {
+      "mean": 0.003512584772801594,
+      "standard_error": 0.001865661872524394,
+      "confidence_interval": [
+        0.0007412589391369959,
+        0.007961723703427556
+      ]
+    },
+    "AMI": {
+      "mean": 0.003233192971259911
+    },
+    "Accuracy": {
+      "mean": 0.7593884120171673,
+      "standard_error": 0.007019024859172911,
+      "confidence_interval": [
+        0.7454399141630901,
+        0.773068669527897
+      ]
+    },
+    "F1": {
+      "mean": 0.7593884120171673
+    }
+  },
+  "prompt30": {
+    "prompt_text": "Rerank products by relevance to the e-commerce query.",
+    "V-score": {
+      "mean": 0.00318815777649183,
+      "standard_error": 0.0018440414562878042,
+      "confidence_interval": [
+        0.0006424340813861002,
+        0.007283180153999244
+      ]
+    },
+    "AMI": {
+      "mean": 0.0029114733643808596
+    },
+    "Accuracy": {
+      "mean": 0.7939914163090128,
+      "standard_error": 0.006822923017644046,
+      "confidence_interval": [
+        0.7800429184549357,
+        0.8060622317596566
+      ]
+    },
+    "F1": {
+      "mean": 0.7939914163090128
+    }
+  },
+  "prompt31": {
+    "prompt_text": "Classify the sentiment of the given review as positive or negative.",
+    "V-score": {
+      "mean": 0.0024193379698322025,
+      "standard_error": 0.0014508492818333886,
+      "confidence_interval": [
+        0.00041242691281411544,
+        0.005838104801640401
+      ]
+    },
+    "AMI": {
+      "mean": 0.002215366846529252
+    },
+    "Accuracy": {
+      "mean": 0.8100858369098712,
+      "standard_error": 0.006288275239093965,
+      "confidence_interval": [
+        0.7974785407725322,
+        0.8218884120171673
+      ]
+    },
+    "F1": {
+      "mean": 0.8100858369098712
+    }
+  },
+  "prompt32": {
+    "prompt_text": "Generate a creative story based on the prompt.",
+    "V-score": {
+      "mean": 0.003842310530590939,
+      "standard_error": 0.00201465046905769,
+      "confidence_interval": [
+        0.0009081748359846636,
+        0.008412461592128917
+      ]
+    },
+    "AMI": {
+      "mean": 0.003566288945885122
+    },
+    "Accuracy": {
+      "mean": 0.8264484978540773,
+      "standard_error": 0.006090815213155605,
+      "confidence_interval": [
+        0.8149141630901288,
+        0.8378892946013564
+      ]
+    },
+    "F1": {
+      "mean": 0.8264484978540773
+    }
+  },
+  "prompt33": {
+    "prompt_text": "Extract all named entities from the text and categorise them as PERSON, LOCATION, or ORGANIZATION.",
+    "V-score": {
+      "mean": 0.004901824632627872,
+      "standard_error": 0.0020327936755444704,
+      "confidence_interval": [
+        0.0016710861231670497,
+        0.009577876955916676
+      ]
+    },
+    "AMI": {
+      "mean": 0.004692203887393037
+    },
+    "Accuracy": {
+      "mean": 0.8213519313304721,
+      "standard_error": 0.006252906744832768,
+      "confidence_interval": [
+        0.8084763948497854,
+        0.8328862660944206
+      ]
+    },
+    "F1": {
+      "mean": 0.8213519313304721
+    }
+  },
+  "prompt34": {
+    "prompt_text": "Search for related information.",
+    "V-score": {
+      "mean": 0.0033521837717348916,
+      "standard_error": 0.0019440158890134192,
+      "confidence_interval": [
+        0.0007250190627853553,
+        0.008345566151076494
+      ]
+    },
+    "AMI": {
+      "mean": 0.003075383590994809
+    },
+    "Accuracy": {
+      "mean": 0.835568669527897,
+      "standard_error": 0.005937048316752443,
+      "confidence_interval": [
+        0.8238423443052284,
+        0.8462982832618026
+      ]
+    },
+    "F1": {
+      "mean": 0.835568669527897
+    }
+  },
+  "prompt35": {
+    "prompt_text": "Find documents related to the topic.",
+    "V-score": {
+      "mean": 0.0033521837717348916,
+      "standard_error": 0.001841115323720336,
+      "confidence_interval": [
+        0.0006714837939645992,
+        0.007626982110439904
+      ]
+    },
+    "AMI": {
+      "mean": 0.003075383590994809
+    },
+    "Accuracy": {
+      "mean": 0.7910407725321889,
+      "standard_error": 0.0065592324727453835,
+      "confidence_interval": [
+        0.7781652360515021,
+        0.8033798283261803
+      ]
+    },
+    "F1": {
+      "mean": 0.7910407725321889
+    }
+  },
+  "prompt36": {
+    "prompt_text": "Find something useful.",
+    "V-score": {
+      "mean": 0.00410917012959082,
+      "standard_error": 0.0020915209295844575,
+      "confidence_interval": [
+        0.0011343833893272294,
+        0.008964125895244054
+      ]
+    },
+    "AMI": {
+      "mean": 0.003831440612091102
+    },
+    "Accuracy": {
+      "mean": 0.8079399141630901,
+      "standard_error": 0.006449142514511835,
+      "confidence_interval": [
+        0.7953997031446208,
+        0.8206083388568717
+      ]
+    },
+    "F1": {
+      "mean": 0.8079399141630901
+    }
+  },
+  "prompt37": {
+    "prompt_text": "Retrieve the passage that contains overlapping vocabulary with the source sentence.",
+    "V-score": {
+      "mean": 0.003290673217203731,
+      "standard_error": 0.001917035348163859,
+      "confidence_interval": [
+        0.0007254357106093812,
+        0.007779255531644233
+      ]
+    },
+    "AMI": {
+      "mean": 0.0030136942432485493
+    },
+    "Accuracy": {
+      "mean": 0.8106223175965666,
+      "standard_error": 0.00639014476608992,
+      "confidence_interval": [
+        0.7990879828326181,
+        0.8240343347639485
+      ]
+    },
+    "F1": {
+      "mean": 0.8106223175965666
+    }
+  },
+  "prompt38": {
+    "prompt_text": "asdfjkl qpwoeiru zxcvbnm",
+    "V-score": {
+      "mean": 0.010093034103812843,
+      "standard_error": 0.003154860456805625,
+      "confidence_interval": [
+        0.004638078062270251,
+        0.016882134066773708
+      ]
+    },
+    "AMI": {
+      "mean": 0.009874765582980942
+    },
+    "Accuracy": {
+      "mean": 0.8261802575107297,
+      "standard_error": 0.006164612174104633,
+      "confidence_interval": [
+        0.8143776824034334,
+        0.8387875536480687
+      ]
+    },
+    "F1": {
+      "mean": 0.8261802575107297
+    }
+  },
+  "prompt39": {
+    "prompt_text": "hgJKSbf oiawnef LKJHDS kdjfbs",
+    "V-score": {
+      "mean": 0.0064877646255003295,
+      "standard_error": 0.0024752473277486102,
+      "confidence_interval": [
+        0.0026609855258089006,
+        0.012107637991084672
+      ]
+    },
+    "AMI": {
+      "mean": 0.006253679855811297
+    },
+    "Accuracy": {
+      "mean": 0.8454935622317596,
+      "standard_error": 0.005910420472934677,
+      "confidence_interval": [
+        0.8342274678111588,
+        0.8578326180257511
+      ]
+    },
+    "F1": {
+      "mean": 0.8454935622317596
+    }
+  },
+  "prompt40": {
+    "prompt_text": "!!!! ??? ### @@@",
+    "V-score": {
+      "mean": 0.003271794707446956,
+      "standard_error": 0.0019432941706774025,
+      "confidence_interval": [
+        0.0005921033441134869,
+        0.008038962993094144
+      ]
+    },
+    "AMI": {
+      "mean": 0.0029941595779891606
+    },
+    "Accuracy": {
+      "mean": 0.8409334763948498,
+      "standard_error": 0.005918437412034975,
+      "confidence_interval": [
+        0.8285954143568174,
+        0.851931330472103
+      ]
+    },
+    "F1": {
+      "mean": 0.8409334763948498
+    }
+  },
+  "prompt41": {
+    "prompt_text": "Retrieve the corresponding translation.",
+    "V-score": {
+      "mean": 0.003973741203010225,
+      "standard_error": 0.0020799781973332345,
+      "confidence_interval": [
+        0.001035384467457087,
+        0.008763777216569997
+      ]
+    },
+    "AMI": {
+      "mean": 0.0036980748463896363
+    },
+    "Accuracy": {
+      "mean": 0.8401287553648069,
+      "standard_error": 0.005720312116795097,
+      "confidence_interval": [
+        0.8287912874999334,
+        0.8510330116938639
+      ]
+    },
+    "F1": {
+      "mean": 0.8401287553648069
+    }
+  },
+  "prompt42": {
+    "prompt_text": "Given an English sentence, find its translation.",
+    "V-score": {
+      "mean": 0.004273980419453753,
+      "standard_error": 0.002129022223854764,
+      "confidence_interval": [
+        0.0008313142080214397,
+        0.009012328005482576
+      ]
+    },
+    "AMI": {
+      "mean": 0.00400027683881192
+    },
+    "Accuracy": {
+      "mean": 0.8079399141630901,
+      "standard_error": 0.006508650362464852,
+      "confidence_interval": [
+        0.7950643776824035,
+        0.8208154506437768
+      ]
+    },
+    "F1": {
+      "mean": 0.8079399141630901
+    }
+  },
+  "prompt43": {
+    "prompt_text": "Retrieve parellel sentences.",
+    "V-score": {
+      "mean": 0.003333456007313401,
+      "standard_error": 0.001840919199007687,
+      "confidence_interval": [
+        0.000583781812647136,
+        0.007883496092268289
+      ]
+    },
+    "AMI": {
+      "mean": 0.003056001382431005
+    },
+    "Accuracy": {
+      "mean": 0.7977467811158798,
+      "standard_error": 0.00642598612020696,
+      "confidence_interval": [
+        0.7854077253218884,
+        0.810127974824024
+      ]
+    },
+    "F1": {
+      "mean": 0.7977467811158798
+    }
+  },
+  "prompt44": {
+    "prompt_text": "Translate.",
+    "V-score": {
+      "mean": 0.003873639069325696,
+      "standard_error": 0.001918437143343943,
+      "confidence_interval": [
+        0.0010963844207110827,
+        0.008257975047284764
+      ]
+    },
+    "AMI": {
+      "mean": 0.003596497653839575
+    },
+    "Accuracy": {
+      "mean": 0.8331545064377682,
+      "standard_error": 0.0060040193146752045,
+      "confidence_interval": [
+        0.8212583456985388,
+        0.845225321888412
+      ]
+    },
+    "F1": {
+      "mean": 0.8331545064377682
+    }
+  },
+  "prompt45": {
+    "prompt_text": "Find a sentence that has similar meaning.",
+    "V-score": {
+      "mean": 0.0034765068627739012,
+      "standard_error": 0.0020445172775690134,
+      "confidence_interval": [
+        0.0006901568257249471,
+        0.00828409273048848
+      ]
+    },
+    "AMI": {
+      "mean": 0.0032000633636174998
+    },
+    "Accuracy": {
+      "mean": 0.8031115879828327,
+      "standard_error": 0.00659510706296955,
+      "confidence_interval": [
+        0.7896995708154506,
+        0.8151824034334764
+      ]
+    },
+    "F1": {
+      "mean": 0.8031115879828327
+    }
+  }
+}
