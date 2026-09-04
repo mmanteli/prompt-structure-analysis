@@ -400,6 +400,7 @@ def general_prompts(lang=None):
 
         # Fine tuning
             "Given a question, retrieve Wikipedia passages that answer the question.",
+            "Given a question, retrieve questions that are semantically equivalent to the given question."
 
     ]
     
