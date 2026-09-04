@@ -31,6 +31,7 @@ NON_LANG_DATASETS=("mteb/ARCChallenge" "squad" "webfaq:eng")
 MODELS=(
     #"BAAI/bge-m3"
     "Qwen/Qwen3-Embedding-0.6B"
+    "/flash/project_462001491/models/v1-20260828-095152/checkpoint-18000"
     "intfloat/multilingual-e5-large-instruct"
     #"nvidia/llama-embed-nemotron-8b"
     "microsoft/harrier-oss-v1-0.6b"
@@ -53,39 +54,43 @@ is_lang_specific_data() {
 
 # ── First: structural analysis ──────────────────────────────────────
 
-split="test"
+split="dev"
 
 for dataset in "${DATASETS[@]}"; do   
     for model in "${MODELS[@]}"; do
         for template in "Instruct-Query"; do
-            CMD=(python prompting_metrics_distractors.py \
-                --model=$model \
-                --data_name=$dataset \
-                --split=$split \
-                --template="$template" \
-                --save_prefix="prompt_structure_results" \
-                --batch_size=4)
-
-            model_safe_name="${model//\//_}"
-            data_safe_name="${dataset//\//_}"
-            wait_for_space
-            echo "${model}:${dataset}:${split}_${template}"
-            sbatch --job-name="prompt_metrics_w_distractors2/${model_safe_name}_${data_safe_name}:${split}_${template}" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
-            
-            if is_lang_specific_data $dataset; then
-                CMD=(python prompting_metrics_distractors.py \
+            for k in 1 2 5 10; do
+                CMD=(python actual_distractors.py \
                     --model=$model \
-                    --split=$split \
+                    --k=$k \
                     --data_name=$dataset \
+                    --split=$split \
                     --template="$template" \
-                    --save_prefix="prompt_structure_results" \
-                    --batch_size=4 \
-                    --use_lang_specific_prompts)
+                    --save_prefix="distractor_results" \
+                    --batch_size=4)
 
+                model_safe_name="${model//\//_}"
+                data_safe_name="${dataset//\//_}"
                 wait_for_space
-                echo "${model}:${dataset}:${lang}:${split}_${template}_lang_specific"
-                sbatch --job-name="prompt_metrics_w_distractors2/${model_safe_name}_${data_safe_name}:${split}_${template}_lang_specific" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
-            fi
+                echo "${model}:${dataset}:${split}_${template}_@${k}"
+                sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}_${k}" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
+                
+                if is_lang_specific_data $dataset; then
+                    CMD=(python actual_distractors.py.py \
+                        --model=$model \
+                        --split=$split \
+                        --k=$k \
+                        --data_name=$dataset \
+                        --template="$template" \
+                        --save_prefix="distractor_results" \
+                        --batch_size=4 \
+                        --use_lang_specific_prompts)
+
+                    wait_for_space
+                    echo "${model}:${dataset}:${split}_${template}_@${k}_lang_specific"
+                    sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}${k}_lang_specific" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
+                fi
+            done
         done
     done
 done
