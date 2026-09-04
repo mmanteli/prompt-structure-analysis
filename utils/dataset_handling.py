@@ -84,8 +84,10 @@ def download_arcchallenge(split_to_select="test", downsample=False, **kwargs):
     del ds
     return corpus, queries, qrels_map
 
-def download_squad(**kwargs):
-    with open("/scratch/project_462001491/jmnybl/squad_v1.1/train-splits/train-dev.json") as file:
+def download_squad(split_to_select="dev", **kwargs):
+    report("Downloading SQuAD from local")
+    assert split_to_select in ["train", "dev", "test"], "--split given incorrectly to squad"
+    with open(f"/scratch/project_462001491/jmnybl/squad_v1.1/train-splits/train-{split_to_select}.json") as file:
         dev_data = json.load(file)
     df = pd.DataFrame.from_dict(dev_data)
     corpus = datasets.Dataset.from_dict({"text":df["answer_paragraph"], "_id":[k for k in range(len(df))]})
