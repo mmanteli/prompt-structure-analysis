@@ -107,7 +107,7 @@ def stats(t):
             "full": str(arr),
             }
 
-def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additional_mask=None, prompt_text=None):
+def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additional_mask=None, prompt_text=None, full_texts=None):
     """
     Calculate retrieval metrics for corpus and query embeddings
     query_embeddings = matrix of query embeddings
@@ -147,6 +147,13 @@ def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additi
         # again, they are already in order
         most_similar_docs = sim_line_sorted[:k]
         found_ids = most_similar_docs #[j for j in most_similar_docs]
+        # Below a sanity check: we actually did not include the same answer multiple times
+        # Include this once if any changes are made above
+        #if full_texts:
+        #    found_answers = np.array(full_texts)[found_ids]
+        #    u_t, u_c = np.unique(found_answers, return_counts=True)
+        #    if full_texts[i] in u_t:
+        #        assert len(np.where(u_t == full_texts[i])) == 1, f"Duplicate has made its way to evaluation! Correct:\n{full_texts[i]},\nFound:\n{found_answers} "
 
         # we can already calculate some results with no rank information
         #rec_ = sum(1 for fid in found_ids if fid in relevant_ids) / len(relevant_ids)
@@ -353,17 +360,21 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
 
 
         # evaluation here at the same time
+        retrieval_pool_texts = answers+wrong_answers
         results_vanilla_eval[f"prompt{prompt_num}"] = calculate_scores(k, 
                                                                         embeddings_pq, 
                                                                         embeddings_all_a, 
                                                                         distractors=full_distractors,   # here we want everything masked
+                                                                        full_texts=retrieval_pool_texts,
                                                                         prompt_text=p if p != "" else "empty")
         additional_mask = [len(embeddings_all_a)+i for i in range(N_q)]  # masks each duplicate question
+        retrieval_pool_texts = answers+wrong_answers+queries
         results_distractor_eval[f"prompt{prompt_num}"] = calculate_scores(k,
                                                         embeddings_pq,
                                                         torch.cat([embeddings_all_a, embeddings_q]),
                                                         distractors=full_distractors,  # here again, because we add them in embeddings_q
                                                         additional_mask=additional_mask,
+                                                        full_texts=retrieval_pool_texts,
                                                         prompt_text=p if p != "" else "empty"
                                                        )
         
