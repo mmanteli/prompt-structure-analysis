@@ -408,13 +408,13 @@ def general_prompts(lang=None):
         if "-" in lang:  # tatoeba format
             l, eng_ = lang.split("-")
             if eng_ != "eng":
-                raise AttributeError(f"Language to tatoeba prompt given incorrectly, is {lang}, should be fra-eng, deu-eng")
+                raise AttributeError(f"Language to prompts given incorrectly, is {lang}, should be fra-eng, deu-eng or only fra, deu")
         else:
             l = lang   # assuming parsed already
         try:
             lang = languages.get(part2t=l).name
         except KeyError as err:
-            raise KeyError(f"Cannot resolve {l} with iso639 in tatoeba prompts") from err
+            raise KeyError(f"Cannot resolve {l} with iso639 in prompts") from err
         # add the parsed language here
         p += [
             f"Retrieve the corresponding translation in {lang}.",

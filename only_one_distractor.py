@@ -42,40 +42,69 @@ parser.add_argument('--embedding_prefix', type=str|bool, default=False,
 parser.add_argument('--save_prefix', type=str, default="results_metrics",
                     help="Saving path; model_name, data_name, prompt_type and k added in script")
 
-def create_one_to_one_correspondence(corpus, queries, qrels):
+
+def download_squad_paraphrases(split_to_select="dev", **kwargs):
+    report("Downloading SQuAD from local")
+    assert split_to_select in ["train", "dev", "test"], "--split given incorrectly to squad"
+    with open(f"/scratch/project_462001491/jmnybl/squad_v1.1/train-splits/train-{split_to_select}.json") as file:
+        data = json.load(file)
+    return data
+
+def download_arcchallenge_paraphrases(**kwargs):
+    report("Dowloading ARCChallenge from local")
+    data = []
+    with open("/scratch/project_462001491/jmnybl/arcchallenge-mteb/arcchallenge_queries_genparaphrases_and_answers.json") as file:
+        for line in file:
+            data.append(json.loads(line))
+    return data
+
+def load_paraphrase_data(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def create_one_to_one_correspondence(data, question_field="question", answer_field="answer", distractor_field="generated_paraphrase", id_field="id"):
     """
     Separate questions, distractors, targets, and answers that answer no questions.
     - questions == list of queries which have an answer (in all datasets just all queries)
     - targets == list of answers for the above
-    - distractors == for a question, the other questions that have the same answer
+    - distractors == for a question, generated paraphrase
     - filler == answers that have no associated question
-    We separate them like this so that in evaluation we can simply use the same ids for Q and A sides.
+    We separate them like this so that in evaluation we can simply use the same ids for Q and A sides -> faster calculations.
     """
+    # read the data
     questions = []
+    distractors = []
     targets = []
-    found_ids = set()   # this is used to filter the filler in the end
+    filler_targets = []
     # loop over queries
-    v
+    for line in data:
+        q, q_star, a = line[question_field], line[distractor_field], line[answer_field]
+        if q: # we have not yet entered the non-question answers
+            questions.append(q)
+            distractors.append(q_star)
+            targets.append(a)
+        else:
+            filler_targets.append(a)
 
     # We now know that indices of questions and targets match questions[0]=>targets[0]
-    # Next, look for the distractors == paraphrases of the query
-    # we approximate them as questions that have the same answer
+    # Next, look for duplicate answers (we need to mask them in certain places for fair evaluation)
+    # because we are not using qrels in eval, since we already need the 1-to-1 structure for metrics
     unique_text_ids = np.unique(targets)    # unique answers
-    distractor_id_dict = {k: np.where(np.array(targets) == k)[0] for k in unique_text_ids} # [0] to remove tuple
-    distractor_id_list_per_targets = [distractor_id_dict[t] for t in targets] # which ids share the same answer
+    same_answer_id_dict = {k: np.where(np.array(targets) == k)[0] for k in unique_text_ids} # [0] to remove tuple
+    same_answer_id_list_per_targets = [same_answer_id_dict[t] for t in targets] # which ids share the same answer
     # ok now just rmove the index itself (we do not want to match to self)
-    distractor_id_list_per_question = [[d for d in distractor_id_list_per_targets[i] if d!=i] for i in range(len(questions))]
-    # ^^ these are ids of the paraphrase questions
-    distractor_text_list_per_question = [np.array(questions)[i] for i in distractor_id_list_per_question]
-    # ^^ their associated texts
+    same_answer_id_list_per_question = [[d for d in same_answer_id_list_per_targets[i] if d!=i] for i in range(len(questions))]
+    # ^^ these are ids of the paraphrase questions: use them to mask the other answers!
+    same_answer_text_list_per_question = [np.array(questions)[i] for i in same_answer_id_list_per_question]
+    # ^^ their associated texts (for sanity check)
+
     report("----------Sanity check----------")
     report(f"1. These should be a pair:\n{questions[0]=}\n{targets[0]}")
-    report(f"2. For Q={questions[0]} the distractors (near paraphrases) are\n{distractor_text_list_per_question[0]}")
+    report(f"2. For Q={questions[0]} the distractor(s) (near paraphrases) is/are \n{distractors[0]}")
     report("--------Sanity check end--------")
-    # last, the corpus texts that did not correspond to any answer (they are just filler)
-    unmatched_targets = corpus.filter(lambda example: example["_id"] not in found_ids)
     # return all
-    return  targets, questions, distractor_id_list_per_question, unmatched_targets["text"]
+    return  targets, questions, distractors, filler_targets, same_answer_id_list_per_question
 
 
 def stats(t):
@@ -92,7 +121,7 @@ def stats(t):
             "full": str(arr),
             }
 
-def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additional_mask=None, prompt_text=None, full_texts=None):
+def calculate_scores(k, query_embeddings, corpus_embeddings, additional_mask=None, prompt_text=None, full_texts=None):
     """
     Calculate retrieval metrics for corpus and query embeddings
     query_embeddings = matrix of query embeddings
@@ -116,11 +145,8 @@ def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additi
     precision_at_k = []
     rprecision_at_k = []
     for i, sim_line in enumerate(sims):
-        # mask sim_line:
-        # we do not want the duplicate answers
-        sim_line[distractors[i]] = -float('inf')
-        # if given, mask the duplicate question as well
-        if additional_mask:
+        # mask sim_line if a mask is given (duplicate answers)
+        if additional_mask[i]:
             sim_line[additional_mask[i]] = -float('inf')
         sim_line_sorted = np.argsort(sim_line)[::-1]
         # Calculation: first, find the relevant ids
@@ -134,11 +160,11 @@ def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additi
         found_ids = most_similar_docs #[j for j in most_similar_docs]
         # Below a sanity check: we actually did not include the same answer multiple times
         # Include this once if any changes are made above
-        #if full_texts:
-        #    found_answers = np.array(full_texts)[found_ids]
-        #    u_t, u_c = np.unique(found_answers, return_counts=True)
-        #    if full_texts[i] in u_t:
-        #        assert len(np.where(u_t == full_texts[i])) == 1, f"Duplicate has made its way to evaluation! Correct:\n{full_texts[i]},\nFound:\n{found_answers} "
+        if full_texts:
+            found_answers = np.array(full_texts)[found_ids]
+            u_t, u_c = np.unique(found_answers, return_counts=True)
+        if full_texts[i] in u_t:
+                assert len(np.where(u_t == full_texts[i])) == 1, f"Duplicate has made its way to evaluation! Correct:\n{full_texts[i]},\nFound:\n{found_answers} "
 
         # we can already calculate some results with no rank information
         #rec_ = sum(1 for fid in found_ids if fid in relevant_ids) / len(relevant_ids)
@@ -164,8 +190,8 @@ def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additi
         rprecision_at_k.append(rprec_)
 
     return {"prompt_text": prompt_text,
-            f"mrr@{k}": stats(mrr_at_k),
             f"recall@{k}": stats(recall_at_k),
+            f"mrr@{k}": stats(mrr_at_k),
             f"ndcg@{k}": stats(ndcg_at_k),
             f"F1": stats(f1_at_1),
             f"precision@{k}": stats(precision_at_k),
@@ -173,7 +199,7 @@ def calculate_scores(k, query_embeddings, corpus_embeddings, distractors, additi
             }
 
 
-def calculate_metrics(model_name, prompts, template, queries, answers, distractors, wrong_answers, k=10, batch_size=8):
+def calculate_metrics(model_name, prompts, template, queries, answers, distractors, wrong_answers, duplicate_answers_mask, k=10, batch_size=8):
     """
     Calculate retrieval metrics.
     model_name: path or huggingface alias
@@ -182,8 +208,7 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
     queries: preprocessed queries
     anwers: proprocessed corpus
         NOTE: queries and corpus need to have 1 to 1 correspondence, i.e. no qrels here
-    distractors: ids of near paraphrase queries, e.g. for queries[0], distractors[0] = [1,2,3]
-        if first 4 queries are paraphrases
+    distractors: for each query, a list of texts that are used to distract retrieval
     wrong_answers: "leftovers" from corpus, texts that do not correpond to a query.
     k = number of neighbors considered in all calculations
     batch_size= batch size for embedding
@@ -194,6 +219,7 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
     # embed the "ground truth values": regular queries and targets
     embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
     embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+    embeddings_d = model.encode(distractors, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
     # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
     # and create a "all" embeddings variable: the ids still match to queries bc we only append
     # we use embeddings_a_all in any calculation where it is not strictly necessary to have 1-to-1 QA pairs
@@ -230,26 +256,9 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
         sims_i = sim_q_all[i].clone()
         # mask out the correct pair (i == i)
         sims_i[i] = -float('inf')
-        # mask the identical answers (located in the answer side of distractors)
-        sims_i[distractors[i]] = -float('inf')
         hard_neg_indices.append(torch.topk(sims_i, k_hard).indices)
-    assert all([len(set(hard_neg_indices[qi]) & set(distractors[qi])) == 0 for qi in range(N_q)]), \
-        f"hard neg indices calculation problem, example: {set(hard_neg_indices[0])=} & {set(distractors[0])=}"
 
-    # last thing:
-    # to calculate similarity change from k-nearest distractors
-    # we need to know which distractors are k-closest
-    # above, we need to mask all (otherwise we mark duplicate answers as hard negs)
-    # but here, we simply select the ones that are k-closest to vanilla query
-    # explanation: calculate similarity between one query embedding and its distractor embeddings (by a@b.T)
-    # then select indices that are the most similar topk(a@b.T, k).indices
-    # then take top k (with the possibility that there might be less than k)
-    #distractors_original = distractors
-    report(f"Distractors before filtering: {distractors[0]=}")
-    full_distractors = distractors   # save these for eval!!
-    distractors = [(np.array(distractors[i])[torch.argsort(embeddings_q[i]@embeddings_q[distractors[i],:].T, descending=True)[:k].cpu()]) for i in range(N_q)]
-    report(f"Distractors after filtering: {distractors[0]=}")
-    # calculate metrics per prompt
+    
     results = {}
     results_vanilla_eval = {}
     results_distractor_eval = {}
@@ -331,16 +340,16 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
 
         # metric 6: displacement from Q* = paraphrases
         # same as 4, but we compare to query side with distractor indices
-        sim_q_itself = torch.mm(embeddings_q, embeddings_q.T)
-        sim_pq_with_prompted = torch.mm(embeddings_pq, embeddings_q.T)
+        sim_q_with_distractors= torch.mm(embeddings_q, embeddings_d.T)
+        sim_pq_with_distractors = torch.mm(embeddings_pq, embeddings_d.T)
         paraphrase_neg_sim_change_max = -1*torch.tensor([
-            (sim_pq_with_prompted[i, distractors[i]] - sim_q_itself[i, distractors[i]]).max().item()
-            for i in range(N_q) if isinstance(distractors[i], np.int64) or len(distractors[i]) > 0
+            (sim_pq_with_distractors[i, i] - sim_q_with_distractors[i, i]).max().item()
+            for i in range(N_q)
         ])
 
         paraphrase_neg_sim_change_mean = -1*torch.tensor([
-            (sim_pq_with_prompted[i, distractors[i]] - sim_q_itself[i, distractors[i]]).mean().item()
-            for i in range(N_q) if isinstance(distractors[i], np.int64) or len(distractors[i]) > 0
+            (sim_pq_with_distractors[i,i] - sim_q_with_distractors[i,i]).mean().item()
+            for i in range(N_q)
         ])
 
 
@@ -348,17 +357,16 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
         retrieval_pool_texts = answers+wrong_answers
         results_vanilla_eval[f"prompt{prompt_num}"] = calculate_scores(k, 
                                                                         embeddings_pq, 
-                                                                        embeddings_all_a, 
-                                                                        distractors=full_distractors,   # here we want everything masked
-                                                                        full_texts=retrieval_pool_texts,
+                                                                        embeddings_all_a,
+                                                                        full_texts=retrieval_pool_texts,  # for sanity
+                                                                        additional_mask=duplicate_answers_mask,
                                                                         prompt_text=p if p != "" else "empty")
-        additional_mask = [len(embeddings_all_a)+i for i in range(N_q)]  # masks each duplicate question
-        retrieval_pool_texts = answers+wrong_answers+queries
+        #additional_mask = [len(embeddings_all_a)+i for i in range(N_q)]  # masks each duplicate question
+        retrieval_pool_texts = answers+wrong_answers+distractors
         results_distractor_eval[f"prompt{prompt_num}"] = calculate_scores(k,
                                                         embeddings_pq,
-                                                        torch.cat([embeddings_all_a, embeddings_q]),
-                                                        distractors=full_distractors,  # here again, because we add them in embeddings_q
-                                                        additional_mask=additional_mask,
+                                                        torch.cat([embeddings_all_a, embeddings_d]),
+                                                        additional_mask=duplicate_answers_mask,
                                                         full_texts=retrieval_pool_texts,
                                                         prompt_text=p if p != "" else "empty"
                                                        )
@@ -397,10 +405,13 @@ if __name__=="__main__":
         options.data_name, lang = options.data_name.split(":")
 
     # download the dataset with data_name
-    corpus, queries, qrels = download_dataset(options.data_name,
-                                                lang=lang,
-                                                split_to_select=options.split,
-                                                downsample=options.num_examples)
+    if options.data_name.lower() == "arcchallenge":
+        data = download_arcchallenge_paraphrases()
+        columns = dict(question_field="question", answer_field="answer", distractor_field="generated_paraphrase")
+    elif options.data_name.lower() == "squad":
+        data = download_squad_paraphrases(split_to_select=options.split)
+        columns = dict(question_field="question", answer_field="answer_paragraph", distractor_field="generated_paraphrase", id_field="id")
+
     # download prompts
     # this returns a list of possible instructions to use on the query side
     if options.use_lang_specific_prompts:
@@ -420,9 +431,9 @@ if __name__=="__main__":
     # preprocess the data
     # create 1-to-1 correspondence (i.e. sort by qrels)
     # and return "filler targets" == texts in corpus that do not correspond to a query
-    # distractors == near-paraphrase questions
+    # distractors == paraphrase questions
     # naming of questions, targets to not confuse with the unprocessed corpus and queries
-    targets, questions, distractors, filler_targets = create_one_to_one_correspondence(corpus, queries, qrels)
+    targets, questions, distractors, filler_targets, duplicate_answers_mask = create_one_to_one_correspondence(data, **columns)
 
 
     # save the results
@@ -432,7 +443,9 @@ if __name__=="__main__":
         data_safe_name += f"_{lang}" # bring this back now
     specific_prompts = "_lang_specific" if options.use_lang_specific_prompts else ""
     save_path = f"{options.save_prefix}/{model_safe_name}/{data_safe_name}{specific_prompts if lang is not None else ''}/{options.split}/{options.template}_template"
-    # calculate the metrics
+    
+    
+    # calculate the metrics and eval results
     results, results_vanilla_eval, results_distractor_eval = calculate_metrics(options.model_name,
                                                                                 prompts,
                                                                                 options.template,
@@ -440,6 +453,7 @@ if __name__=="__main__":
                                                                                 targets,
                                                                                 distractors,
                                                                                 filler_targets,
+                                                                                duplicate_answers_mask,
                                                                                 k = options.k,
                                                                                 batch_size=options.batch_size)
 

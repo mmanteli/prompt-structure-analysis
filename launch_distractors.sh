@@ -19,6 +19,7 @@ DATASETS=(
     #"mteb/ARCChallenge"
     #"webfaq:eng"
     "squad"
+    "arcchallenge"
     #"mteb/tatoeba-bitext-mining:fin-eng"
     #"mteb/tatoeba-bitext-mining:fra-eng"
     #"mteb/tatoeba-bitext-mining:zho-eng"
@@ -54,12 +55,12 @@ is_lang_specific_data() {
 
 # ── First: structural analysis ──────────────────────────────────────
 
-split="dev"
+split="test"
 
 for dataset in "${DATASETS[@]}"; do   
     for model in "${MODELS[@]}"; do
         for template in "Instruct-Query"; do
-            for k in 1 2 5 10; do
+            for k in 1 2 10; do
                 CMD=(python actual_distractors.py \
                     --model=$model \
                     --k=$k \
@@ -73,8 +74,9 @@ for dataset in "${DATASETS[@]}"; do
                 data_safe_name="${dataset//\//_}"
                 wait_for_space
                 echo "${model}:${dataset}:${split}_${template}_@${k}"
-                sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}_${k}" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
-                
+                #sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}_${k}" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
+                echo "${CMD[@]}"
+
                 if is_lang_specific_data $dataset; then
                     CMD=(python actual_distractors.py.py \
                         --model=$model \
@@ -88,7 +90,7 @@ for dataset in "${DATASETS[@]}"; do
 
                     wait_for_space
                     echo "${model}:${dataset}:${split}_${template}_@${k}_lang_specific"
-                    sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}${k}_lang_specific" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
+                    #sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}${k}_lang_specific" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
                 fi
             done
         done

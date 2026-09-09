@@ -1,5 +1,6 @@
 test*.py
 test_eval_paraphrase
+test_results
 dev
 logs
 old*
