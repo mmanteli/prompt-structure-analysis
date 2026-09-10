@@ -16,83 +16,76 @@ wait_for_space() {
 
 
 DATASETS=(
-    #"mteb/ARCChallenge"
-    #"webfaq:eng"
+    "mteb/ARCChallenge"
     "squad"
-    "arcchallenge"
-    #"mteb/tatoeba-bitext-mining:fin-eng"
-    #"mteb/tatoeba-bitext-mining:fra-eng"
-    #"mteb/tatoeba-bitext-mining:zho-eng"
-    #"mteb/tatoeba-bitext-mining:ara-eng"
+    "mteb/tatoeba-bitext-mining:ara-eng"
+    "mteb/tatoeba-bitext-mining:cmn-eng"
+    "mteb/tatoeba-bitext-mining:deu-eng"
+    "mteb/tatoeba-bitext-mining:fin-eng"
+    "mteb/tatoeba-bitext-mining:fra-eng"
+    "mteb/tatoeba-bitext-mining:spa-eng"
+    "mteb/tatoeba-bitext-mining:vie-eng"
+    "mteb/tatoeba-bitext-mining:tur-eng"
+    "mteb/tatoeba-bitext-mining:zho-eng"
 )
 
-# datasets that are NOT language-specific (skip --use_lang_specific_prompts)
-NON_LANG_DATASETS=("mteb/ARCChallenge" "squad" "webfaq:eng")
 
 MODELS=(
-    #"BAAI/bge-m3"
+    "BAAI/bge-m3"
     "Qwen/Qwen3-Embedding-0.6B"
-    "/flash/project_462001491/models/v1-20260828-095152/checkpoint-18000"
+    "Qwen/Qwen3-Embedding-4B"
+    #"/flash/project_462001491/models/v1-20260828-095152/checkpoint-18000"
     "intfloat/multilingual-e5-large-instruct"
-    #"nvidia/llama-embed-nemotron-8b"
+    "nvidia/llama-embed-nemotron-8b"
     "microsoft/harrier-oss-v1-0.6b"
-    #"nvidia/NV-Embed-v2"
+    "nvidia/NV-Embed-v2"
     "google/embeddinggemma-300m"
-    #"codefuse-ai/F2LLM-v2-8B"
-    #"Octen/Octen-Embedding-8B"
+    "codefuse-ai/F2LLM-v2-8B"
+    "Octen/Octen-Embedding-8B"
     #"jinaai/jina-embeddings-v5-text-small"
 )
 
 
 
-is_lang_specific_data() {
-    local d="$1"
-    for skip in "${NON_LANG_DATASETS[@]}"; do
-        [[ "$d" == "$skip" ]] && return 1
-    done
-    return 0
-}
-
 # ── First: structural analysis ──────────────────────────────────────
 
 split="test"
+k="[1,2,5,10]"
 
 for dataset in "${DATASETS[@]}"; do   
     for model in "${MODELS[@]}"; do
         for template in "Instruct-Query"; do
-            for k in 1 2 10; do
-                CMD=(python actual_distractors.py \
+            CMD=(python prompt_structure_with_distractors.py \
                     --model=$model \
-                    --k=$k \
-                    --data_name=$dataset \
                     --split=$split \
+                    --nn=10 \
+                    --data_name=$dataset \
                     --template="$template" \
-                    --save_prefix="distractor_results" \
+                    --save_prefix="results" \
                     --batch_size=4)
 
-                model_safe_name="${model//\//_}"
-                data_safe_name="${dataset//\//_}"
-                wait_for_space
-                echo "${model}:${dataset}:${split}_${template}_@${k}"
-                #sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}_${k}" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
-                echo "${CMD[@]}"
+            wait_for_space
+            echo "STRUCTURE ${model}:${dataset}:${split}_${template}_@${k}"
+            #sbatch --job-name="distractors/${model_safe_name}/${data_safe_name}:${split}_${template}_10nn" -t 0:59:59 slurm_run_command_gpu.sh "${CMD[@]}"
+        done
+    done
+done
 
-                if is_lang_specific_data $dataset; then
-                    CMD=(python actual_distractors.py.py \
-                        --model=$model \
-                        --split=$split \
-                        --k=$k \
-                        --data_name=$dataset \
-                        --template="$template" \
-                        --save_prefix="distractor_results" \
-                        --batch_size=4 \
-                        --use_lang_specific_prompts)
+for dataset in "${DATASETS[@]}"; do   
+    for model in "${MODELS[@]}"; do
+        for template in "Instruct-Query"; do
+            CMD=(python prompt_eval_with_distractors.py \
+                    --model=$model \
+                    --split=$split \
+                    --k=$k \
+                    --data_name=$dataset \
+                    --template="$template" \
+                    --save_prefix="results" \
+                    --batch_size=4)
 
-                    wait_for_space
-                    echo "${model}:${dataset}:${split}_${template}_@${k}_lang_specific"
-                    #sbatch --job-name="distractors/${model_safe_name}_${data_safe_name}:${split}_${template}${k}_lang_specific" -t 0:29:59 slurm_run_command_gpu.sh "${CMD[@]}"
-                fi
-            done
+            wait_for_space
+            echo "EVAL ${model}:${dataset}:${split}_k12510"
+            #sbatch --job-name="distractors_eval/${model_safe_name}/${data_safe_name}:${split}_${template}_k12510" -t 2:59:59 slurm_run_command_gpu.sh "${CMD[@]}"
         done
     done
 done

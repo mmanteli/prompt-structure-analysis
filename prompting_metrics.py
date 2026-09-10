@@ -195,7 +195,7 @@ def stats(t):
             "median": float(np.median(arr)),
             "q25": float(np.percentile(arr, 25)),
             "q75": float(np.percentile(arr, 75)),
-            "full": str(arr)}
+            }
 
 
 def calculate_metrics(model_name, queries, answers, prompts, template, wrong_answers=None, k=10, batch_size=8, embeddings=None):

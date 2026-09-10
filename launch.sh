@@ -28,10 +28,10 @@ NON_LANG_DATASETS=("mteb/ARCChallenge")
 
 MODELS=(
     "BAAI/bge-m3"
-    "Qwen/Qwen3-Embedding-0.6"
-    "intfloat/multilingual-e5-large-instruct"
+    #"Qwen/Qwen3-Embedding-0.6"
+    #"intfloat/multilingual-e5-large-instruct"
     "nvidia/llama-embed-nemotron-8b"
-    "microsoft/harrier-oss-v1-0.6b"
+    #"microsoft/harrier-oss-v1-0.6b"
     "nvidia/NV-Embed-v2"
     "google/embeddinggemma-300m"
     "codefuse-ai/F2LLM-v2-8B"

@@ -6,9 +6,12 @@ import pandas as pd
 seed = 42
 random.seed(seed)
 
-path_to_data=os.environ["DATAPATH"]
-if path_to_data[-1] != "/":
-    path_to_data += "/"
+try:
+    path_to_data=os.environ["DATAPATH"]
+    if path_to_data[-1] != "/":
+        path_to_data += "/"
+except:
+    path_to_data="./"
 
 def report(msg):
     # for quick flushing
@@ -24,7 +27,35 @@ def downsample_with_seed(ds, rows=5000):
         ds = ds.select(random_indices)
     return ds
 
+def to_qrels(examples, query_field="query", target_field="target"):
+    """Build corpus, queries, and binary qrels from prepared SQuAD JSON rows."""
+    
+    # collect unique corpus first, make sure these are unique
+    corpus_texts = set([e[target_field] for e in examples]) # collect unique target texts
+    text_to_id = {text: i for i, text in enumerate(corpus_texts)}  # dictionary, from text to id
 
+    queries = {"_id": [], "text": []}
+    qrels = []
+    for i, ex in enumerate(examples):
+        qid = f"q{i}"
+        queries["_id"].append(qid)
+        queries["text"].append(ex[query_field])
+        qrels.append({"query-id": qid, "corpus-id": text_to_id[ex[target_field]], "score": 1.0}) 
+
+    corpus_texts = list(text_to_id.keys())
+    corpus_ids = ["c"+str(text_to_id[t]) for t in corpus_texts]
+    corpus = {"_id": corpus_ids, "text": corpus_texts}
+    # remake qrels
+    new_qrels = {"query_id":[], "corpus_id":[], "score":[]}
+    for line in qrels:
+        new_qrels["query_id"].append(str(line["query-id"]))
+        new_qrels["corpus_id"].append(str(line["corpus-id"]))
+        new_qrels["score"].append(line["score"])
+    qrels_ = datasets.Dataset.from_dict(new_qrels)
+    
+    return datasets.Dataset.from_dict(corpus), \
+           datasets.Dataset.from_dict(queries),\
+           qrels_
 
 # --------------------------------------RETRIEVAL-------------------------------------- #
 def download_webfaq_from_hub(lang=None, **kwargs):
@@ -47,7 +78,7 @@ def download_webfaq(lang=None, split_to_select="test", downsample=False,**kwargs
                                          "text":ds[split_to_select]["answer2"]}) # 2's contain the target lang
     queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
                                          "text":ds[split_to_select]["question2"]})
-    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    qrels_map = {f"q{k}":f"c{k}" for k in range(len(corpus))} # they are in the same order
     del ds
     return corpus, queries, qrels_map
 
@@ -56,7 +87,7 @@ def download_squad_from_hub(split_to_select="test", **kwargs):
     ds = datasets.load_dataset("rajpurkar/squad", split=split_to_select)
     corpus = ds["test"]["context"]
     queries = ds["test"]["question"]
-    qrels_dict = {k:k for k in range(len(corpus))}
+    qrels_dict = {f"q{k}":f"c{k}" for k in range(len(corpus))}
     return corpus, queries, qrels_map
 
 
@@ -67,9 +98,14 @@ def download_arcchallenge_from_hub(**kwargs):
     corpus = datasets.load_dataset("mteb/ARCChallenge", "corpus", revision="61b42fe57d9a44e30f47b9b878b664a95472ec80")
     qrels = datasets.load_dataset("mteb/ARCChallenge", "qrels", revision="61b42fe57d9a44e30f47b9b878b664a95472ec80")
     queries = datasets.load_dataset("mteb/ARCChallenge", "queries", revision="61b42fe57d9a44e30f47b9b878b664a95472ec80")
+    # handle qrels:
+    query_ids, corpus_ids, scores = (qrels["test"].to_dict()[key] for key in ["query-id", "corpus-id", "score"])
+    assert all([s==1 for s in scores]), "qrels is not binary relevance, cannot make a qrels dict"
+    qrels_map = {k:v for k,v in zip(query_ids, corpus_ids)}
     return corpus[split_to_select], \
            queries[split_to_select], \
-           qrels[split_to_select].rename_column("query-id","query_id").rename_column("corpus-id", "corpus_id")
+           qrels_map
+           #qrels[split_to_select].rename_column("query-id","query_id").rename_column("corpus-id", "corpus_id")
 
 def download_arcchallenge(split_to_select="test", downsample=False, **kwargs):
     report(f"Downloading ARCChallenge ({split_to_select}) from local")
@@ -80,7 +116,7 @@ def download_arcchallenge(split_to_select="test", downsample=False, **kwargs):
                                          "text":ds[split_to_select]["document"]})
     queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
                                          "text":ds[split_to_select]["query"]})
-    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    qrels_map = {f"q{k}":f"c{k}" for k in range(len(corpus))} # they are in the same order
     del ds
     return corpus, queries, qrels_map
 
@@ -89,11 +125,7 @@ def download_squad(split_to_select="dev", **kwargs):
     assert split_to_select in ["train", "dev", "test"], "--split given incorrectly to squad"
     with open(f"/scratch/project_462001491/jmnybl/squad_v1.1/train-splits/train-{split_to_select}.json") as file:
         dev_data = json.load(file)
-    df = pd.DataFrame.from_dict(dev_data)
-    corpus = datasets.Dataset.from_dict({"text":df["answer_paragraph"], "_id":[k for k in range(len(df))]})
-    queries = datasets.Dataset.from_dict({"text":df["question"], "_id":[k for k in range(len(df))]})
-    qrels = {k:k for k in range(len(df))}
-    return corpus, queries, qrels
+    return to_qrels(dev_data, query_field="question", target_field="answer_paragraph")
 
 def download_nq_from_hub(**kwargs):
     report("Downloading Natural Questions from the hf-hub")
@@ -126,11 +158,11 @@ def download_tatoeba_from_hub(lang=None, split_to_select="test", **kwargs):
     report(f"Downloading Tatoeba:{lang} ({split_to_select}) from hf-hub")
     assert lang is not None, f"{lang=} give a language"
     ds = datasets.load_dataset("mteb/tatoeba-bitext-mining", lang, revision="69e8f12da6e31d59addadda9a9c8a2e601a0e282")
-    corpus = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+    corpus = datasets.Dataset.from_dict({"_id": ["c"+str(i) for i in range(len(ds[split_to_select]))],
                                          "text":ds[split_to_select]["sentence1"]}) # non-english
-    queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
+    queries = datasets.Dataset.from_dict({"_id": ["q"+str(i) for i in range(len(ds[split_to_select]))],
                                          "text":ds[split_to_select]["sentence2"]}) # english
-    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    qrels_map = {f"q{k}":f"c{k}" for k in range(len(corpus))} # they are in the same order
     del ds
     return corpus, queries, qrels_map
 
@@ -146,7 +178,7 @@ def download_tatoeba(lang=None, split_to_select="test", downsample=False,**kwarg
                                          "text":ds[split_to_select]["non_english"]}) # non-english
     queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
                                          "text":ds[split_to_select]["english"]})  # english
-    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    qrels_map = {f"q{k}":f"c{k}" for k in range(len(corpus))} # they are in the same order
     del ds
     return corpus, queries, qrels_map
 
@@ -179,7 +211,7 @@ def download_summeval(split_to_select = "test", downsample=False, **kwargs):
                                          "text":ds[split_to_select]["summary"]})
     queries = datasets.Dataset.from_dict({"_id": range(len(ds[split_to_select])),
                                          "text":ds[split_to_select]["text"]})
-    qrels_map = {k:k for k in range(len(corpus))} # they are in the same order
+    qrels_map = {f"q{k}":f"c{k}" for k in range(len(corpus))} # they are in the same order
     del ds
     # queries = original text, get the prompt "Summarize the given paragraph into a short paragraph."
     # corpus = the summaries

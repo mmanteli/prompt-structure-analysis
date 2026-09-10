@@ -1,12 +1,13 @@
 test*.py
 test_eval_paraphrase
 test_results
-dev
+_dev
 logs
 old*
 *_old
 embeddings_eval
 embeddings_struct
+distractor_results
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

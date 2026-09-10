@@ -404,7 +404,7 @@ def general_prompts(lang=None):
 
     ]
     
-    if lang:
+    if lang:  # we add even more
         if "-" in lang:  # tatoeba format
             l, eng_ = lang.split("-")
             if eng_ != "eng":
@@ -414,7 +414,10 @@ def general_prompts(lang=None):
         try:
             lang = languages.get(part2t=l).name
         except KeyError as err:
-            raise KeyError(f"Cannot resolve {l} with iso639 in prompts") from err
+            if l == "cmn":
+                lang = "Mandarin Chinese"
+            else:
+                raise KeyError(f"Cannot resolve {l} with iso639 in prompts") from err
         # add the parsed language here
         p += [
             f"Retrieve the corresponding translation in {lang}.",
@@ -424,15 +427,15 @@ def general_prompts(lang=None):
             "Find a sentence that has similar meaning.",
         ]
     # if no lang, just drop the "in {lang}"
-    else:
-        p += [
-            # when we have no language definition, just drop all "in {lang}"
-            f"Retrieve the corresponding translation.",
-            f"Given an English sentence, find its translation.",
-            f"Retrieve parellel sentences.",
-            f"Translate.",
-            "Find a sentence that has similar meaning.",
-        ]
+    #else:  # add these anyway!
+    p += [
+        # when we have no language definition, just drop all "in {lang}"
+        f"Retrieve the corresponding translation.",
+        f"Given an English sentence, find its translation.",
+        f"Retrieve parellel sentences.",
+        f"Translate.",
+        "Find a sentence that has similar meaning.",
+    ]
 
     return p
 
@@ -469,7 +472,9 @@ def get_detailed_instruct(prompt, query, template="Instruct-Query"):
     raise NotImplementedError(f"{template=} not implemented")
 
 if __name__=="__main__":
-    prompts = get_prompts("Some data name", lang="ita")
+    prompts = get_prompts("Some data name", lang="cmn-eng")
     print(len(prompts))
+    for p in prompts:
+        print(p)
     #print(get_prompts("Some data name", lang="deu-eng"))
     #print(get_prompts("Some data name", lang=None))
