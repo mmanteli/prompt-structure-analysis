@@ -179,14 +179,16 @@ def embed_and_calculate_scores(options, model, dataset_specific_prompts, corpus,
     assert "text" in queries.column_names and "_id" in queries.column_names
     
     # embed the corpus==targets/answers --> prompt has no effect on these
-    corpus_embeddings = model.encode(corpus["text"], normalize_embeddings=True, convert_to_tensor=True, batch_size=options.batch_size)
+    corpus_embeddings = model.encode(corpus["text"], normalize_embeddings=True, convert_to_tensor=True, 
+                                    batch_size=options.batch_size).float()
 
     # loop over prompts
     results = {}
     for i,p in enumerate(dataset_specific_prompts):
         # encode template(prompt, query)
         prompted_queries = [get_detailed_instruct(p, q, template=options.template) for q in queries[:]["text"]]
-        query_embeddings = model.encode(prompted_queries, normalize_embeddings=True, convert_to_tensor=True, batch_size=options.batch_size)
+        query_embeddings = model.encode(prompted_queries, normalize_embeddings=True, convert_to_tensor=True, 
+                                        batch_size=options.batch_size).float()
         report(f"----\nNow in prompt {i}, example: \n{prompted_queries[0]}")
         if isinstance(options.k, int):
             report("RUNNING ON THE OLD VERSION FOR SANITY")
@@ -207,7 +209,6 @@ if __name__=="__main__":
     # download the dataset with data_name
     report("Reading data")
     corpus, queries, qrels = download_dataset(options.data_name, split_to_select=options.split, lang=lang)
-    print(corpus)
     # read distractors:
     report("Reading distractors")
     distractors_raw, field = read_distractors(options.data_name, split_to_select=options.split, lang=lang)
@@ -257,7 +258,7 @@ if __name__=="__main__":
 
     # download model
     report("Downloading model")
-    model = SentenceTransformer(options.model_name, trust_remote_code=True)
+    model = SentenceTransformer(options.model_name, trust_remote_code=True).to('cuda')
 
     # vanilla eval
     report("Evaluating without distractors")

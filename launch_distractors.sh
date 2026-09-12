@@ -16,35 +16,36 @@ wait_for_space() {
 
 
 DATASETS=(
-    "mteb/ARCChallenge"
-    "squad"
-    "mteb/tatoeba-bitext-mining:ara-eng"
-    "mteb/tatoeba-bitext-mining:cmn-eng"
-    "mteb/tatoeba-bitext-mining:deu-eng"
-    "mteb/tatoeba-bitext-mining:fin-eng"
-    "mteb/tatoeba-bitext-mining:fra-eng"
-    "mteb/tatoeba-bitext-mining:spa-eng"
-    "mteb/tatoeba-bitext-mining:vie-eng"
-    "mteb/tatoeba-bitext-mining:tur-eng"
-    "mteb/tatoeba-bitext-mining:zho-eng"
+    #"mteb/ARCChallenge"
+    #"squad"
+    #"mteb/tatoeba-bitext-mining:ara-eng"
+    #"mteb/tatoeba-bitext-mining:cmn-eng"
+    #"mteb/tatoeba-bitext-mining:deu-eng"
+    #"mteb/tatoeba-bitext-mining:fin-eng"
+    #"mteb/tatoeba-bitext-mining:fra-eng"
+    #"mteb/tatoeba-bitext-mining:spa-eng"
+    #"mteb/tatoeba-bitext-mining:vie-eng"
+    #"mteb/tatoeba-bitext-mining:tur-eng"
 )
 
 
 MODELS=(
-    "BAAI/bge-m3"
-    "Qwen/Qwen3-Embedding-0.6B"
-    "Qwen/Qwen3-Embedding-4B"
-    #"/flash/project_462001491/models/v1-20260828-095152/checkpoint-18000"
-    "intfloat/multilingual-e5-large-instruct"
-    "nvidia/llama-embed-nemotron-8b"
-    "microsoft/harrier-oss-v1-0.6b"
-    "nvidia/NV-Embed-v2"
-    "google/embeddinggemma-300m"
-    "codefuse-ai/F2LLM-v2-8B"
-    "Octen/Octen-Embedding-8B"
-    #"jinaai/jina-embeddings-v5-text-small"
+    #"BAAI/bge-m3"  # 1024
+    #"Qwen/Qwen3-Embedding-0.6B"   # 1024
+    #"Qwen/Qwen3-Embedding-4B"   # 2560
+    #"ibm-granite/granite-embedding-311m-multilingual-r2"   # 768
+    #"/scratch/project_462001491/jmnybl/final_embedding_model_checkpoints/v2-20260909-final/final-finetuned-model"
+    #"/scratch/project_462001491/jmnybl/final_embedding_model_checkpoints/v2-20260909-final/checkpoint-18754"
+    #"intfloat/multilingual-e5-large-instruct"   #1024
+    #"nvidia/llama-embed-nemotron-8b"   # 4096
+    #"microsoft/harrier-oss-v1-0.6b"   # 1024
+    #"google/embeddinggemma-300m"   # 768
+    #"codefuse-ai/F2LLM-v2-4B"     # 2560
+    #"Octen/Octen-Embedding-8B"   # 4096
 )
-
+# these we tried:
+##"tencent/KaLM-Embedding-Gemma3-12B-2511" # 3840 
+##"nvidia/NV-Embed-v2"    # 4096
 
 
 # ── First: structural analysis ──────────────────────────────────────
@@ -63,10 +64,11 @@ for dataset in "${DATASETS[@]}"; do
                     --template="$template" \
                     --save_prefix="results" \
                     --batch_size=4)
-
+            model_safe_name="${model//\//_}"
+            data_safe_name="${dataset//\//_}"
             wait_for_space
             echo "STRUCTURE ${model}:${dataset}:${split}_${template}_@${k}"
-            #sbatch --job-name="distractors/${model_safe_name}/${data_safe_name}:${split}_${template}_10nn" -t 0:59:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            sbatch --job-name="distractors/${model_safe_name}/${data_safe_name}:${split}_${template}_10nn" -t 4:49:59 slurm_run_command_gpu.sh "${CMD[@]}"
         done
     done
 done
@@ -82,10 +84,11 @@ for dataset in "${DATASETS[@]}"; do
                     --template="$template" \
                     --save_prefix="results" \
                     --batch_size=4)
-
+            model_safe_name="${model//\//_}"
+            data_safe_name="${dataset//\//_}"
             wait_for_space
             echo "EVAL ${model}:${dataset}:${split}_k12510"
-            #sbatch --job-name="distractors_eval/${model_safe_name}/${data_safe_name}:${split}_${template}_k12510" -t 2:59:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            sbatch --job-name="distractors_eval/${model_safe_name}/${data_safe_name}:${split}_${template}_k12510" -t 4:59:59 slurm_run_command_gpu.sh "${CMD[@]}"
         done
     done
 done

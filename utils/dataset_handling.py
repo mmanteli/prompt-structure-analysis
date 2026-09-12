@@ -40,12 +40,12 @@ def to_qrels(examples, query_field="query", target_field="target"):
         qid = f"q{i}"
         queries["_id"].append(qid)
         queries["text"].append(ex[query_field])
-        qrels.append({"query-id": qid, "corpus-id": text_to_id[ex[target_field]], "score": 1.0}) 
+        qrels.append({"query-id": qid, "corpus-id": "c"+str(text_to_id[ex[target_field]]), "score": 1.0}) 
 
     corpus_texts = list(text_to_id.keys())
     corpus_ids = ["c"+str(text_to_id[t]) for t in corpus_texts]
     corpus = {"_id": corpus_ids, "text": corpus_texts}
-    # remake qrels
+    # remake qrels to a datasets.Dataset()
     new_qrels = {"query_id":[], "corpus_id":[], "score":[]}
     for line in qrels:
         new_qrels["query_id"].append(str(line["query-id"]))

@@ -8,6 +8,7 @@ old*
 embeddings_eval
 embeddings_struct
 distractor_results
+results
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -11,6 +11,7 @@
 #SBATCH -o logs/%x-%j.out
 
 echo "Running on gpu: $@"
+echo $(date +%d/%m/%Y_%H:%M:%S)
 
 # module setup
 module purge
@@ -19,6 +20,7 @@ module load pytorch/2.7
 export PYTHONPATH=/scratch/project_462001394/amanda/pythonuserbase/lib/python3.11/site-packages:$PYTHONPATH
 export HF_HOME=/scratch/project_462001394/hf_cache
 export DATAPATH=/flash/project_462001394/datasets/
-export HFKEY=$(cat /scratch/project_462001394/amanda/prompting/hf_token.txt)
+export HFKEY=$(cat /scratch/project_462001491/amanda/prompting/hf_token.txt)
 
 srun "$@"
+echo $(date +%d/%m/%Y_%H:%M:%S)

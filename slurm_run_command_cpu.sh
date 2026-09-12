@@ -10,7 +10,7 @@
 #SBATCH -o logs/%x-%j.out
 
 echo "Running on cpu: $@"
-
+echo $(date +%d/%m/%Y_%H:%M:%S)
 # module setup
 module purge
 module use /appl/local/csc/modulefiles
@@ -21,3 +21,4 @@ export DATAPATH=/flash/project_462001394/datasets/
 export HFKEY=$(cat ../hf_token.txt)
 
 srun "$@"
+echo $(date +%d/%m/%Y_%H:%M:%S)

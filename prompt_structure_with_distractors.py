@@ -154,7 +154,7 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
     """
     # if the dataset is already sorted in this way (some dataset download scripts return this format)
     if len(corpus) == len(queries) and (qrels == {f"q{k}":f"c{k}" for k in range(len(queries))} or qrels == {k:k for k in range(len(queries))}):
-        return corpus["text"], queries["text"], None
+        return corpus["text"], queries["text"], None, None
     questions = []
     targets = []
     found_ids = set()
@@ -167,7 +167,7 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
         #print(f"{relevant_ids=}, {assoc_scores=}")
         most_relevant_id = relevant_ids[0]
         found = [l for l in corpus if l["_id"] == most_relevant_id]
-        assert len(found) == 1, f"Duplicate ids in corpus, {most_relevant_id=} resulted in {found=}"
+        assert len(found) == 1, f"Duplicate ids OR no match in corpus, {most_relevant_id=} resulted in {found=}"
         c_id, c_text = found[0]["_id"], found[0]["text"]
         questions.append(q_text)
         targets.append(c_text)
@@ -176,7 +176,14 @@ def create_one_to_one_correspondence(corpus, queries, qrels):
     # check for overlap: sometimes there may be docs that are identical but with different ids
     overlap = set(targets)&set(filler_targets)
     filler_targets = [f for f in filler_targets if f not in overlap]
-    return  targets, questions, filler_targets
+    # find the texts with the same exact answer: masked in hard_negatives
+    unique_text_ids = np.unique(targets)    # unique answers
+    same_answer_id_dict = {k: np.where(np.array(targets) == k)[0] for k in unique_text_ids} # [0] to remove tuple
+    same_answer_id_list_per_targets = [same_answer_id_dict[t] for t in targets] # which ids share the same answer
+    # ok now just rmove the index itself (we do not want to match to self)
+    same_answer_id_list_per_question = [[d for d in same_answer_id_list_per_targets[i] if d!=i] for i in range(len(questions))]
+    # ^^ these are ids of the same answers: use them to mask the other answers when we look for closest false pos!
+    return targets, questions, filler_targets, same_answer_id_list_per_question
 
 
 
@@ -195,7 +202,7 @@ def stats(t):
 
 
 
-def calculate_metrics(model_name, prompts, template, queries, answers, distractors, wrong_answers, k=10, batch_size=8):
+def calculate_metrics(model_name, prompts, template, queries, answers, distractors, wrong_answers, k=10, batch_size=8, same_answers_mask=None):
     """
     Calculate retrieval metrics.
     model_name: path or huggingface alias
@@ -210,20 +217,20 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
     batch_size= batch size for embedding
     """
     report("Downloading model...")
-    model = SentenceTransformer(model_name, trust_remote_code=True)
+    model = SentenceTransformer(model_name, trust_remote_code=True).to('cuda')
     report("Model loaded.")
     # embed the "ground truth values": regular queries and targets
-    embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
-    embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+    embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size).float()
+    embeddings_a = model.encode(answers, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size).float()
     if len(distractors)>0:
-        embeddings_d = model.encode(distractors, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size)
+        embeddings_d = model.encode(distractors, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size).float()
     # if the dataset has filler/wrong answers, answers with no question that answers then, embed them as well
     # and create a "all" embeddings variable: the ids still match to queries bc we only append
     # we use embeddings_a_all in any calculation where it is not strictly necessary to have 1-to-1 QA pairs
     if wrong_answers:
         # yes filler, so concatenate them at the end
         embeddings_wa = model.encode(wrong_answers, convert_to_tensor=True,
-                                     normalize_embeddings=True, batch_size=batch_size)
+                                     normalize_embeddings=True, batch_size=batch_size).float()
         embeddings_all_a = torch.concat((embeddings_a, embeddings_wa))
     else:
         # no filler
@@ -253,6 +260,9 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
         sims_i = sim_q_all[i].clone()
         # mask out the correct pair (i == i)
         sims_i[i] = -float('inf')
+        # mask out duplicates
+        if same_answers_mask and same_answer_mask[i]: # first checks if the variable is none, second if for current i we have a mask
+            sims_i[same_answers_mask[i]] = -float('inf')
         hard_neg_indices.append(torch.topk(sims_i, k_hard).indices)
 
     results = {}
@@ -262,7 +272,7 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
         # sanity check printout: see that template is filled correctly
         report(f"Sanity: Example of what is embedded:\n----\n{prompts_and_queries[0]}\n----\n")
         embeddings_pq = model.encode(prompts_and_queries, convert_to_tensor=True,
-                                        normalize_embeddings=True, batch_size=batch_size)
+                                        normalize_embeddings=True, batch_size=batch_size).float()
 
         # Chord vector from query to prompted query ( to compare with delta_a)
         # delta_q2a = embeddings_a - embeddings_q
@@ -388,7 +398,7 @@ if __name__=="__main__":
     
     # create one-to-one correspondence: each query is in the same index with its answer
     report("Creating one-to-one")
-    targets, questions, filler_targets = create_one_to_one_correspondence(corpus, queries, qrels)
+    targets, questions, filler_targets, same_answer_mask = create_one_to_one_correspondence(corpus, queries, qrels)
     report(f"Found {len(questions)=}, {len(targets)=} and {(len(filler_targets) if filler_targets else filler_targets)=}")
     report(f"Sanity: {questions[0]=} {targets[0]=}")
 
@@ -438,7 +448,8 @@ if __name__=="__main__":
                                 distractors,
                                 filler_targets,
                                 k = options.nn,
-                                batch_size=options.batch_size)
+                                batch_size=options.batch_size,
+                                same_answers_mask=same_answer_mask)
 
     # save the results
     os.makedirs(save_path, exist_ok=True)
