@@ -216,8 +216,11 @@ def calculate_metrics(model_name, prompts, template, queries, answers, distracto
     k = number of neighbors considered knn
     batch_size= batch size for embedding
     """
-    report("Downloading model...")
-    model = SentenceTransformer(model_name, trust_remote_code=True).to('cuda')
+    report("Downloading model")
+    if options.model_name == "ibm-granite/granite-embedding-311m-multilingual-r2":
+        model = SentenceTransformer(options.model_name, trust_remote_code=True, model_kwargs={"attn_implementation": "eager"}).to('cuda')
+    else:
+        model = SentenceTransformer(options.model_name, trust_remote_code=True).to('cuda')
     report("Model loaded.")
     # embed the "ground truth values": regular queries and targets
     embeddings_q = model.encode(queries, convert_to_tensor=True, normalize_embeddings=True, batch_size=batch_size).float()
@@ -440,19 +443,20 @@ if __name__=="__main__":
     
     report("Calculating")
     # calculate the metrics and eval results
-    results = calculate_metrics(options.model_name,
-                                prompts,
-                                options.template,
-                                questions,
-                                targets,
-                                distractors,
-                                filler_targets,
-                                k = options.nn,
-                                batch_size=options.batch_size,
-                                same_answers_mask=same_answer_mask)
+    if not os.path.exists(f'{save_path}/prompt_geometry_{options.nn}nn_1_distractor_and_1_false_positive.json'):
+        results = calculate_metrics(options.model_name,
+                                    prompts,
+                                    options.template,
+                                    questions,
+                                    targets,
+                                    distractors,
+                                    filler_targets,
+                                    k = options.nn,
+                                    batch_size=options.batch_size,
+                                    same_answers_mask=same_answer_mask)
 
-    # save the results
-    os.makedirs(save_path, exist_ok=True)
-    report(f"Saving to {save_path}")
-    with open(f'{save_path}/prompt_geometry_{options.nn}nn_1_distractor_and_1_false_positive.json', 'w') as f:
-        json.dump(results, f, indent=2)
+        # save the results
+        os.makedirs(save_path, exist_ok=True)
+        report(f"Saving to {save_path}")
+        with open(f'{save_path}/prompt_geometry_{options.nn}nn_1_distractor_and_1_false_positive.json', 'w') as f:
+            json.dump(results, f, indent=2)

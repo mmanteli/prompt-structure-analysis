@@ -258,21 +258,26 @@ if __name__=="__main__":
 
     # download model
     report("Downloading model")
-    model = SentenceTransformer(options.model_name, trust_remote_code=True).to('cuda')
+    if options.model_name == "ibm-granite/granite-embedding-311m-multilingual-r2":
+        model = SentenceTransformer(options.model_name, trust_remote_code=True, model_kwargs={"attn_implementation": "eager"}).to('cuda')
+    else:
+        model = SentenceTransformer(options.model_name, trust_remote_code=True).to('cuda')
 
     # vanilla eval
-    report("Evaluating without distractors")
-    results = embed_and_calculate_scores(options, model, prompts, corpus, queries, qrels)
-
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    with open(save_path+f"eval@{safe_k}.json", 'w') as f:
-        json.dump(results,f, indent=2)
-
-    if distractors_raw:
-        report("Evaluating with distractors")
-        results = embed_and_calculate_scores(options, model, prompts, corpus2, queries, qrels)
+    if not os.path.exists(save_path+f"eval@{safe_k}.json"):
+        report("Evaluating without distractors")
+        results = embed_and_calculate_scores(options, model, prompts, corpus, queries, qrels)
 
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        with open(save_path+f"eval@{safe_k}_with_distractors.json", 'w') as f:
+        with open(save_path+f"eval@{safe_k}.json", 'w') as f:
             json.dump(results,f, indent=2)
+
+    if distractors_raw:
+        if not os.path.exists(save_path+f"eval@{safe_k}_with_distractors.json"):
+            report("Evaluating with distractors")
+            results = embed_and_calculate_scores(options, model, prompts, corpus2, queries, qrels)
+
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path+f"eval@{safe_k}_with_distractors.json", 'w') as f:
+                json.dump(results,f, indent=2)
 
