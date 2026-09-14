@@ -46,16 +46,19 @@ def to_qrels(examples, query_field="query", target_field="target"):
     corpus_ids = ["c"+str(text_to_id[t]) for t in corpus_texts]
     corpus = {"_id": corpus_ids, "text": corpus_texts}
     # remake qrels to a datasets.Dataset()
-    new_qrels = {"query_id":[], "corpus_id":[], "score":[]}
+    #new_qrels = {"query_id":[], "corpus_id":[], "score":[]}
+    new_qrels_dict = {}
     for line in qrels:
-        new_qrels["query_id"].append(str(line["query-id"]))
-        new_qrels["corpus_id"].append(str(line["corpus-id"]))
-        new_qrels["score"].append(line["score"])
-    qrels_ = datasets.Dataset.from_dict(new_qrels)
+        #new_qrels["query_id"].append(str(line["query-id"]))
+        #new_qrels["corpus_id"].append(str(line["corpus-id"]))
+        #new_qrels["score"].append(line["score"])
+        assert line["score"] == 1, "Cannot construct a dict for relevance"
+        new_qrels_dict[str(line["query-id"])] = str(line["corpus-id"])
+    #qrels_ = datasets.Dataset.from_dict(new_qrels)
     
     return datasets.Dataset.from_dict(corpus), \
            datasets.Dataset.from_dict(queries),\
-           qrels_
+           new_qrels_dict
 
 # --------------------------------------RETRIEVAL-------------------------------------- #
 def download_webfaq_from_hub(lang=None, **kwargs):
