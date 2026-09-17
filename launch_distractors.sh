@@ -17,7 +17,7 @@ wait_for_space() {
 
 DATASETS=(
     #"mteb/ARCChallenge"
-    #"squad"
+    "squad"
     #"mteb/tatoeba-bitext-mining:ara-eng"
     #"mteb/tatoeba-bitext-mining:cmn-eng"
     #"mteb/tatoeba-bitext-mining:deu-eng"
@@ -30,18 +30,19 @@ DATASETS=(
 
 
 MODELS=(
-    #"BAAI/bge-m3"  # 1024
-    #"Qwen/Qwen3-Embedding-0.6B"   # 1024
+    "BAAI/bge-m3"  # 1024
+    "Qwen/Qwen3-Embedding-0.6B"   # 1024
     #"Qwen/Qwen3-Embedding-4B"   # 2560
     #"ibm-granite/granite-embedding-311m-multilingual-r2"   # 768
     #"/scratch/project_462001491/jmnybl/final_embedding_model_checkpoints/v2-20260909-final/final-finetuned-model"
     #"/scratch/project_462001491/jmnybl/final_embedding_model_checkpoints/v2-20260909-final/checkpoint-18754"
-    #"intfloat/multilingual-e5-large-instruct"   #1024
+    "intfloat/multilingual-e5-large-instruct"   #1024
     #"nvidia/llama-embed-nemotron-8b"   # 4096
-    #"microsoft/harrier-oss-v1-0.6b"   # 1024
-    #"google/embeddinggemma-300m"   # 768
+    "microsoft/harrier-oss-v1-0.6b"   # 1024
+    "google/embeddinggemma-300m"   # 768
     #"codefuse-ai/F2LLM-v2-4B"     # 2560
     #"Octen/Octen-Embedding-8B"   # 4096
+    "/scratch/project_462001491/jmnybl/checkpoint-19478-tatoeba"
 )
 # these we tried:
 ##"tencent/KaLM-Embedding-Gemma3-12B-2511" # 3840 
@@ -67,8 +68,8 @@ for dataset in "${DATASETS[@]}"; do
             model_safe_name="${model//\//_}"
             data_safe_name="${dataset//\//_}"
             wait_for_space
-            echo "STRUCTURE ${model}:${dataset}:${split}_${template}_@${k}"
-            sbatch --job-name="distractors/${model_safe_name}/${data_safe_name}:${split}_${template}_10nn" -t 4:49:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            #echo "STRUCTURE ${model}:${dataset}:${split}_${template}_@${k}"
+            #sbatch --job-name="distractors/${model_safe_name}/${data_safe_name}:${split}_${template}_10nn" -t 7:49:59 slurm_run_command_gpu.sh "${CMD[@]}"
         done
     done
 done
@@ -88,7 +89,7 @@ for dataset in "${DATASETS[@]}"; do
             data_safe_name="${dataset//\//_}"
             wait_for_space
             echo "EVAL ${model}:${dataset}:${split}_k12510"
-            sbatch --job-name="distractors_eval/${model_safe_name}/${data_safe_name}:${split}_${template}_k12510" -t 4:59:59 slurm_run_command_gpu.sh "${CMD[@]}"
+            sbatch --job-name="distractors_eval_final_missing2/${model_safe_name}/${data_safe_name}:${split}_${template}_k12510" -t 23:59:59 slurm_run_command_gpu.sh "${CMD[@]}"
         done
     done
 done
