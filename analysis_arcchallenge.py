@@ -12,18 +12,18 @@ base_path = "results"
 score_path = "results"
 template = "Instruct-Query"
 models = [
-          #"BAAI__bge-m3",
-          #"codefuse-ai__F2LLM-v2-4B",
-          #"google__embeddinggemma-300m",
-          #"intfloat__multilingual-e5-large-instruct",
-          #"microsoft__harrier-oss-v1-0.6b",
-          #"Octen__Octen-Embedding-8B",
+          "BAAI__bge-m3",
+          "codefuse-ai__F2LLM-v2-4B",
+          "google__embeddinggemma-300m",
+          "intfloat__multilingual-e5-large-instruct",
+          "microsoft__harrier-oss-v1-0.6b",
+          "Octen__Octen-Embedding-8B",
           "Qwen__Qwen3-Embedding-0.6B",
-          #"Qwen__Qwen3-Embedding-4B",
-          "__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints__v2-20260909-final__final-finetuned-model"
+          "Qwen__Qwen3-Embedding-4B",
+          #"__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints__v2-20260909-final__final-finetuned-model"
           ]
-dataset = "squad"
-split = "dev"
+dataset = "mteb__ARCChallenge"
+split = "test"
 path = lambda model: f"{base_path}/{model}/{dataset}/{split}/{template}_template/"
 path_scores = lambda model: f"{score_path}/{model}/{dataset}/{split}/{template}_template/"
 
@@ -41,7 +41,7 @@ prompts_appropriate = prompts_retrieval
 
 
 
-def construct_df(model, show=False, score= "recall@1", 
+def construct_df(model, show=False, score= "ndcg@10", 
             displ="sim_q2pq", sim_inc="sim_improvement", angul="chord_similarity",
             columns_to_select=[
                     "score", 
@@ -104,7 +104,7 @@ def construct_df(model, show=False, score= "recall@1",
 # parse results
 
 dfs = {}
-score="recall@1"
+score="ndcg@10"
 for m in models:
     dfs_same_model =[]
     try:
@@ -114,8 +114,7 @@ for m in models:
         print(f"Cannot construct results for {m}")
         raise(e)
     dfs[m] = pd.concat(dfs_same_model)
-    print(m)
-    print(dfs[m].head())
+
 
 
 
@@ -128,6 +127,9 @@ def score_vs_approriate_analysis(dfs, formula="score_normalized ~ appropriate",
     full_results = {}
     for model_name, df in dfs.items():
         full_results[model_name] = {}
+        # top k first: easiest to understand 
+        if topk:
+                full_results[model_name]["topk"] = top_k(df, *topk)
         # linear regression statsmodels style
         #result_ols = smf.ols(formula, data=df).fit()
         #full_results[model_name]["r2"] = result_ols.rsquared
@@ -140,11 +142,10 @@ def score_vs_approriate_analysis(dfs, formula="score_normalized ~ appropriate",
         full_results[model_name]["r2"] = reg_result
         # this assert was already checked to hold
         #assert np.isclose(result_ols.rsquared, reg_result), f"{result_ols.rsquared} != {reg_result}" 
-        
+        # last: Mann-Whitney
         if MV:
-            full_results[model_name]["r_rb"] = MW_effect_size(df, *MV)
-        if topk:
-            full_results[model_name]["topk"] = top_k(df, *topk)
+            full_results[model_name]["MV"] = MW_effect_size(df, *MV)
+        
     return full_results
 
 def top_k(df, score_column, label_column):
@@ -180,39 +181,72 @@ def format_number(n):
         return str(np.round(n,3))
 
 
-def to_latex_rows(results):
+def to_latex_rows(results, column_names=None):
+    if column_names:
+        print(" & ".join([c.replace("_"," ") for c in column_names]), "\\\\")
     for model_name, r in results.items():
-        print(" & ".join([model_name.replace("__", "/"), format_number(r["topk"]), format_number(r["r2"]), format_number(r["r_rb"])]),  "\\\\")
+        print(" & ".join([model_name.replace("__", "/")]+ [format_number(r_) for r_ in r.values()]),  "\\\\")
 
 print(score)
-to_latex_rows(full_results_score_only)
+to_latex_rows(full_results_score_only,column_names=["Model"]+[i for i in full_results_score_only["BAAI__bge-m3"].keys()])
 print("------------------------------------")
 
 # add column to all dfs and analyse
 
-score_to_analyse = "score_normalized"
-metric_to_analyse = "displacement_normalized"
+
+def ols_analysis(dfs):
+    for metric_to_analyse in ["displacement_normalized", "sim_improvement_normalized", "angulation_normalized"]:
+        score_to_analyse = "score_normalized"
+
+        m_results ={}
+
+        for model_name, df in dfs.items():
+            m_results[model_name] = {}
+            # full spearman
+            sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
+            # appropriate and other prompts
+            appr_mask = df["appropriate"] == 1
+            non_appr_mask = df["appropriate"] == 0
+            sp_appr, p_value_appr = stats.spearmanr(df[appr_mask][score_to_analyse], df[appr_mask][metric_to_analyse])
+            sp_nappr, p_value_nappr = stats.spearmanr(df[non_appr_mask][score_to_analyse], df[non_appr_mask][metric_to_analyse])
+
+            # linear fit analysis
+            df["interaction"] = df[metric_to_analyse] * df["appropriate"]
+            result_ols = smf.ols(f"{score_to_analyse}~ {metric_to_analyse} + appropriate + interaction", data=df).fit()
+            #print("model:", model_name)
+            #print("Spearman:", f"{np.round(sp_full, 3)}{'*' if p_value_full<0.05 else ''}")
+            #print("Spearman (appr):", f"{np.round(sp_appr, 3)}{'*' if p_value_appr<0.05 else ''}")
+            #print("Spearman (others):", f"{np.round(sp_nappr, 3)}{'*' if p_value_nappr<0.05 else ''}")
+            #print("Linear fit:")
+            #print("\tR^2:", np.round(result_ols.rsquared, 3))
+            #for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
+            #    print(f"\t{n}:{np.round(v,3)}{'*' if p<0.05 else ''}")
+            #print("")
+            m_results[model_name]["spearman_full"] = (sp_full, p_value_full)
+            #m_results[model_name]["spearman_appr"] = (sp_appr, p_value_appr)
+            #m_results[model_name]["spearman_nappr"] = (sp_nappr, p_value_nappr)
+            #m_results[model_name]["r2"] = result_ols.rsquared
+            #for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
+            #    m_results[model_name][n] = (v,p)
+        #print(metric_to_analyse)
+        #to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
+        #print("------------------------------------------")
+
+
+
+m_results={}
 
 for model_name, df in dfs.items():
-    # full spearman
-    sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
-    # appropriate and other prompts
-    appr_mask = df["appropriate"] == 1
-    non_appr_mask = df["appropriate"] == 0
-    sp_appr, p_value_appr = stats.spearmanr(df[appr_mask][score_to_analyse], df[appr_mask][metric_to_analyse])
-    sp_nappr, p_value_nappr = stats.spearmanr(df[non_appr_mask][score_to_analyse], df[non_appr_mask][metric_to_analyse])
-
-    # linear fit analysis
-    df["interaction"] = df[metric_to_analyse] * df["appropriate"]
-    result_ols = smf.ols(f"{score_to_analyse}~ {metric_to_analyse} + appropriate + interaction", data=df).fit()
-    print("model:", model_name)
-    print("Spearman:", f"{np.round(sp_full, 3)}{'*' if p_value_full<0.05 else ''}")
-    print("Spearman (appr):", f"{np.round(sp_appr, 3)}{'*' if p_value_appr<0.05 else ''}")
-    print("Spearman (others):", f"{np.round(sp_nappr, 3)}{'*' if p_value_nappr<0.05 else ''}")
-    print("Linear fit:")
-    print("\tR^2:", np.round(result_ols.rsquared, 3))
-    for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
-        print(f"\t{n}:{np.round(v,3)}{'*' if p<0.05 else ''}")
-    print("")
+    m_results[model_name] = {}
+    score_to_analyse = "score"
+    for metric_to_analyse in ["displacement", "sim_improvement", "angulation"]:
+        sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
+        m_results[model_name][f"spearman_{metric_to_analyse}"] = (sp_full, p_value_full)
+print(score)
+to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
 
 
+for model_name, df in dfs.items():
+    dist= df["score_distracted"]
+    reg = df["score"]
+    print(model_name,max(dist),max(reg))

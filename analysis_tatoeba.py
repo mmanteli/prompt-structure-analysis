@@ -151,6 +151,8 @@ def mlm_analysis(dfs, analysis_formula, MV=("score_normalized", "appropriate"), 
     full_results = {}
     for model_name, df in dfs.items():
         full_results[model_name] = {}
+        if topk:
+            full_results[model_name]["topk"] = top_k(df, *topk)
         model = smf.mixedlm(analysis_formula, df, groups=df["language"], )
         result = model.fit()
         if result.converged:
@@ -159,9 +161,7 @@ def mlm_analysis(dfs, analysis_formula, MV=("score_normalized", "appropriate"), 
             print(f"Not converged for {model_name}")
             full_results[model_name]["r2"] = None
         if MV:
-            full_results[model_name]["r_rb"] = MW_effect_size(df, *MV)
-        if topk:
-            full_results[model_name]["topk"] = top_k(df, *topk)
+            full_results[model_name]["MV"] = MW_effect_size(df, *MV)
     return full_results
 
 def top_k(df, score_column, label_column):
@@ -199,9 +199,11 @@ def format_number(n):
         return str(np.round(n,3))
 
 
-def to_latex_rows(results):
+def to_latex_rows(results, column_names=None):
+    if column_names:
+        print(" & ".join([c.replace("_"," ") for c in column_names]), "\\\\")
     for model_name, r in results.items():
-        print(" & ".join([model_name.replace("__", "/"), format_number(r["topk"]), format_number(r["r2"]), format_number(r["r_rb"])]),  "\\\\")
+        print(" & ".join([model_name.replace("__", "/")]+ [format_number(r_) for r_ in r.values()]),  "\\\\")
 
 print(score)
 to_latex_rows(full_results)
@@ -209,29 +211,59 @@ print("------------------------------------")
 
 # add column to all dfs and analyse
 
+
 score_to_analyse = "score_normalized"
-metric_to_analyse = "displacement_normalized"
+for metric_to_analyse in ["displacement_normalized", "sim_improvement_normalized", "angulation_normalized"]:
+
+    m_results = {}
+    for model_name, df in dfs.items():
+        m_results[model_name] = {}
+        # full spearman
+        sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
+        # appropriate and other prompts
+        appr_mask = df["appropriate"] == 1
+        non_appr_mask = df["appropriate"] == 0
+        sp_appr, p_value_appr = stats.spearmanr(df[appr_mask][score_to_analyse], df[appr_mask][metric_to_analyse])
+        sp_nappr, p_value_nappr = stats.spearmanr(df[non_appr_mask][score_to_analyse], df[non_appr_mask][metric_to_analyse])
+
+        # linear fit analysis
+        df["interaction"] = df[metric_to_analyse] * df["appropriate"]
+        result_ols = smf.ols(f"{score_to_analyse} ~ {metric_to_analyse} + appropriate + interaction", data=df).fit()   #
+        #print("model:", model_name)
+        #print("Spearman:", f"{np.round(sp_full, 3)}{'*' if p_value_full<0.05 else ''}")
+        #print("Spearman (appr):", f"{np.round(sp_appr, 3)}{'*' if p_value_appr<0.05 else ''}")
+        #print("Spearman (others):", f"{np.round(sp_nappr, 3)}{'*' if p_value_nappr<0.05 else ''}")
+        #print("Linear fit:")
+        #print("\tR^2:", np.round(result_ols.rsquared, 3))
+        #for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
+        #    print(f"\t{n}:{np.round(v,3)}{'*' if p<0.05 else ''}")
+        #print("")
+        m_results[model_name]["spearman_full"] = (sp_full, p_value_full)
+        #m_results[model_name]["spearman_appr"] = (sp_appr, p_value_appr)
+        #m_results[model_name]["spearman_nappr"] = (sp_nappr, p_value_nappr)
+        m_results[model_name]["r2"] = result_ols.rsquared
+        for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
+            m_results[model_name][n] = (v,p)
+
+    print(metric_to_analyse)
+    to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
+    print("------------------------------------------")
+
+
+
+m_results={}
+score_to_analyse = "score_normalized"
+for model_name, df in dfs.items():
+    m_results[model_name] = {}
+    for metric_to_analyse in ["displacement_normalized", "sim_improvement_normalized", "angulation_normalized"]:
+        sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
+        m_results[model_name][f"spearman_{metric_to_analyse}"] = (sp_full, p_value_full)
+print(score_to_analyse)
+to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
+
+
 
 for model_name, df in dfs.items():
-    # full spearman
-    sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
-    # appropriate and other prompts
-    appr_mask = df["appropriate"] == 1
-    non_appr_mask = df["appropriate"] == 0
-    sp_appr, p_value_appr = stats.spearmanr(df[appr_mask][score_to_analyse], df[appr_mask][metric_to_analyse])
-    sp_nappr, p_value_nappr = stats.spearmanr(df[non_appr_mask][score_to_analyse], df[non_appr_mask][metric_to_analyse])
-
-    # linear fit analysis
-    df["interaction"] = df[metric_to_analyse] * df["appropriate"]
-    result_ols = smf.ols(f"{score_to_analyse}~ {metric_to_analyse} + appropriate + interaction", data=df).fit()
-    print("model:", model_name)
-    print("Spearman:", f"{np.round(sp_full, 3)}{'*' if p_value_full<0.05 else ''}")
-    print("Spearman (appr):", f"{np.round(sp_appr, 3)}{'*' if p_value_appr<0.05 else ''}")
-    print("Spearman (others):", f"{np.round(sp_nappr, 3)}{'*' if p_value_nappr<0.05 else ''}")
-    print("Linear fit:")
-    print("\tR^2:", np.round(result_ols.rsquared, 3))
-    for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
-        print(f"\t{n}:{np.round(v,3)}{'*' if p<0.05 else ''}")
-    print("")
-
-
+    dist= df["score_distracted"]
+    reg = df["score"]
+    print(model_name,min(dist),max(dist),max(reg))

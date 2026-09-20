@@ -9,6 +9,7 @@ embeddings_eval
 embeddings_struct
 distractor_results
 results
+plots
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
