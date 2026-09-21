@@ -263,7 +263,20 @@ to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge
 
 
 
+d_results={}
 for model_name, df in dfs.items():
-    dist= df["score_distracted"]
+    d_results[model_name]={}
+    dist= df["score_distracted"]    
     reg = df["score"]
-    print(model_name,min(dist),max(dist),max(reg))
+    dist_only_appr = df[df.appropriate==1]["score_distracted"]
+    #if max(dist_only_appr) < max(dist):
+    #    # best prompt is not retrieval prompt
+    #    suffix = "*"
+    d_results[model_name]["max R@1"] = max(reg)
+    d_results[model_name]["max R@1 distr."] = max(dist)
+    d_results[model_name]["max R@1 dist. (appr.)"] = max(dist_only_appr)
+    # which language contains each
+    print(model_name, df[df.score_distracted == max(dist)]["language"])
+    #print(model_name,"\t\t", max(reg),"\t",max(dist_only_appr))
+
+to_latex_rows(d_results,column_names=["Model"]+[i for i in d_results["BAAI__bge-m3"].keys()])

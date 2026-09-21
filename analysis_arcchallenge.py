@@ -21,6 +21,7 @@ models = [
           "Qwen__Qwen3-Embedding-0.6B",
           "Qwen__Qwen3-Embedding-4B",
           #"__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints__v2-20260909-final__final-finetuned-model"
+          "__scratch__project_462001491__jmnybl__checkpoint-19478-tatoeba",
           ]
 dataset = "mteb__ARCChallenge"
 split = "test"
@@ -185,6 +186,8 @@ def to_latex_rows(results, column_names=None):
     if column_names:
         print(" & ".join([c.replace("_"," ") for c in column_names]), "\\\\")
     for model_name, r in results.items():
+        if "scratch" in model_name:
+            model_name = model_name.split("__")[-1]
         print(" & ".join([model_name.replace("__", "/")]+ [format_number(r_) for r_ in r.values()]),  "\\\\")
 
 print(score)
@@ -246,7 +249,62 @@ print(score)
 to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
 
 
+# reconstruct for the following analysis
+
+dfs = {}
+score="recall@1"
+for m in models:
+    dfs_same_model =[]
+    try:
+        df = construct_df(m, score=score)
+        dfs_same_model.append(df)
+    except Exception as e:
+        print(f"Cannot construct results for {m}")
+        raise(e)
+    dfs[m] = pd.concat(dfs_same_model)
+
+d_results={}
 for model_name, df in dfs.items():
+    d_results[model_name]={}
+    dist= df["score_distracted"]    
+    reg = df["score"]
+    dist_only_appr = df[df.appropriate==1]["score_distracted"]
+    d_results[model_name]["max R@1"] = max(reg)
+    d_results[model_name]["max R@1 distr."] = max(dist)
+    d_results[model_name]["max R@1 dist. (appr.)"] = max(dist_only_appr)
+
+to_latex_rows(d_results,column_names=["Model"]+[i for i in d_results["BAAI__bge-m3"].keys()])
+
+print("--------------------------------------------")
+# finetuning
+
+models = [
+          "Qwen__Qwen3-Embedding-0.6B",
+          "__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints__v2-20260909-final__final-finetuned-model",
+          "__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints_tatoeba__v1-20260915-final__final-finetuned-model"
+          ]
+
+dfs = {}
+score="recall@1"
+for m in models:
+    dfs_same_model =[]
+    try:
+        df = construct_df(m, score=score)
+        dfs_same_model.append(df)
+    except Exception as e:
+        print(f"Cannot construct results for {m}")
+        raise(e)
+    dfs[m] = pd.concat(dfs_same_model)
+
+f_results = {}
+for model_name, df in dfs.items():
+    f_results[model_name]={}
     dist= df["score_distracted"]
     reg = df["score"]
-    print(model_name,max(dist),max(reg))
+    dist_only_appr = df[df.appropriate==1]["score_distracted"]
+    f_results[model_name][f"max {score}"] = max(reg)
+    #f_results[model_name][f"max {score} distr."] = max(dist)
+    f_results[model_name][f"max {score} dist. (appr.)"] = max(dist_only_appr)
+    #print(model_name,"\t\t", max(reg),"\t",max(dist_only_appr))
+
+to_latex_rows(f_results,column_names=["Model"]+[i for i in f_results["Qwen__Qwen3-Embedding-0.6B"].keys()])
