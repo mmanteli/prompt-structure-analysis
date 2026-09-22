@@ -20,8 +20,8 @@ models = [
           "Octen__Octen-Embedding-8B",
           "Qwen__Qwen3-Embedding-0.6B",
           "Qwen__Qwen3-Embedding-4B",
-          #"__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints__v2-20260909-final__final-finetuned-model"
-          "__scratch__project_462001491__jmnybl__checkpoint-19478-tatoeba",
+          # finetuned model: later in this file
+          #"__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints__v2-20260909-final__final-finetuned-model",
           ]
 dataset = "mteb__ARCChallenge"
 split = "test"
@@ -89,14 +89,21 @@ def construct_df(model, show=False, score= "ndcg@10",
     df_geom = pd.DataFrame.from_dict(data1).T
     df_geom = df_geom.drop_duplicates(subset="prompt_text")   # again, one calculated twice!
     for column_name, column in zip(["displacement", "sim_improvement", "angulation"],[displ, sim_inc, angul]):
-        df_geom[column_name] = [d["mean"] for d in df_geom[column]]
-        df_geom[column_name+"_normalized"] = stats.zscore(df_geom[column_name])
+        if column_name == "displacement":
+            # here we transform it from cosine similarity to cosine distance: cos_dist = 1-cos_sim
+            df_geom[column_name] = [1-d["mean"] for d in df_geom[column]]
+            df_geom[column_name+"_normalized"] = stats.zscore(df_geom[column_name])
+        else:
+            df_geom[column_name] = [d["mean"] for d in df_geom[column]]
+            df_geom[column_name+"_normalized"] = stats.zscore(df_geom[column_name])
      
     # merge ALL
     df = df.merge(df_geom, on='prompt_text')
     #drop the no-prompt option: metrics do not apply to it
-    df = df[df.prompt_text != "NO_PROMPT"]
+    # and the empty option: This was not relevant to the experiments
+    df = df[~df.prompt_text.isin(["NO_PROMPT", "EMPTY"])]
     if show: display(df.head())
+    print(len(df))
     if columns_to_select:
         return df[columns_to_select]
     return df
@@ -190,11 +197,10 @@ def to_latex_rows(results, column_names=None):
             model_name = model_name.split("__")[-1]
         print(" & ".join([model_name.replace("__", "/")]+ [format_number(r_) for r_ in r.values()]),  "\\\\")
 
-print(score)
+print(f"--------------------Instructions only {score}------------------------")
 to_latex_rows(full_results_score_only,column_names=["Model"]+[i for i in full_results_score_only["BAAI__bge-m3"].keys()])
-print("------------------------------------")
+print("-----------------------------------------------------------------------")
 
-# add column to all dfs and analyse
 
 
 def ols_analysis(dfs):
@@ -245,11 +251,12 @@ for model_name, df in dfs.items():
     for metric_to_analyse in ["displacement", "sim_improvement", "angulation"]:
         sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
         m_results[model_name][f"spearman_{metric_to_analyse}"] = (sp_full, p_value_full)
-print(score)
+        
+print(f"--------------------Correlations {score}------------------------")
 to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
+print("-----------------------------------------------------------------")
 
-
-# reconstruct for the following analysis
+# reconstruct for the following analysis (we need recall@1)
 
 dfs = {}
 score="recall@1"
@@ -262,6 +269,19 @@ for m in models:
         print(f"Cannot construct results for {m}")
         raise(e)
     dfs[m] = pd.concat(dfs_same_model)
+
+# correlations again
+m_results={}
+for model_name, df in dfs.items():
+    m_results[model_name] = {}
+    score_to_analyse = "score"
+    for metric_to_analyse in ["displacement", "sim_improvement", "angulation"]:
+        sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
+        m_results[model_name][f"spearman_{metric_to_analyse}"] = (sp_full, p_value_full)
+        
+print(f"--------------------Correlations {score}------------------------")
+to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
+print("-----------------------------------------------------------------")
 
 d_results={}
 for model_name, df in dfs.items():
@@ -273,38 +293,39 @@ for model_name, df in dfs.items():
     d_results[model_name]["max R@1 distr."] = max(dist)
     d_results[model_name]["max R@1 dist. (appr.)"] = max(dist_only_appr)
 
+print(f"--------------------Distractors {score}------------------------")
 to_latex_rows(d_results,column_names=["Model"]+[i for i in d_results["BAAI__bge-m3"].keys()])
-
-print("--------------------------------------------")
+print("----------------------------------------------------------------")
 # finetuning
 
 models = [
           "Qwen__Qwen3-Embedding-0.6B",
           "__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints__v2-20260909-final__final-finetuned-model",
-          "__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints_tatoeba__v1-20260915-final__final-finetuned-model"
           ]
 
-dfs = {}
-score="recall@1"
-for m in models:
-    dfs_same_model =[]
-    try:
-        df = construct_df(m, score=score)
-        dfs_same_model.append(df)
-    except Exception as e:
-        print(f"Cannot construct results for {m}")
-        raise(e)
-    dfs[m] = pd.concat(dfs_same_model)
+for score in ["recall@1", "recall@5", "ndcg@10"]:
+    dfs = {}
+    for m in models:
+        dfs_same_model =[]
+        try:
+            df = construct_df(m, score=score)
+            dfs_same_model.append(df)
+        except Exception as e:
+            print(f"Cannot construct results for {m}")
+            raise(e)
+        dfs[m] = pd.concat(dfs_same_model)
 
-f_results = {}
-for model_name, df in dfs.items():
-    f_results[model_name]={}
-    dist= df["score_distracted"]
-    reg = df["score"]
-    dist_only_appr = df[df.appropriate==1]["score_distracted"]
-    f_results[model_name][f"max {score}"] = max(reg)
-    #f_results[model_name][f"max {score} distr."] = max(dist)
-    f_results[model_name][f"max {score} dist. (appr.)"] = max(dist_only_appr)
-    #print(model_name,"\t\t", max(reg),"\t",max(dist_only_appr))
+    f_results = {}
+    for model_name, df in dfs.items():
+        f_results[model_name]={}
+        dist= df["score_distracted"]
+        reg = df["score"]
+        dist_only_appr = df[df.appropriate==1]["score_distracted"]
+        f_results[model_name][f"max {score}"] = max(reg)
+        #f_results[model_name][f"max {score} distr."] = max(dist)
+        f_results[model_name][f"max {score} dist. (appr.)"] = max(dist_only_appr)
+        #print(model_name,"\t\t", max(reg),"\t",max(dist_only_appr))
 
-to_latex_rows(f_results,column_names=["Model"]+[i for i in f_results["Qwen__Qwen3-Embedding-0.6B"].keys()])
+    print(f"--------------------After finetune {score}------------------------")
+    to_latex_rows(f_results,column_names=["Model"]+[i for i in f_results["Qwen__Qwen3-Embedding-0.6B"].keys()])
+    print(f"------------------------------------------------------------------")

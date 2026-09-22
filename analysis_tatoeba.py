@@ -6,6 +6,24 @@ from sklearn.linear_model import LinearRegression
 import statsmodels.formula.api as smf
 from scipy import stats
 from iso639 import languages
+import matplotlib.pyplot as plt
+import os
+plot_save_dir="matplotlib_plots"
+os.makedirs(plot_save_dir, exist_ok=True)
+
+def plot(df, x, y, labels, label_mapping=None, save_name="testi.png"):
+    x_values = df[x]
+    y_values = df[y]
+    l_values = df[labels]
+    for l in set(l_values):
+        l_name = l if label_mapping is None else label_mapping[l]
+        x = [x_values[i] for i in range(len(df)) if labels[i] == l]
+        y = [y_values[i] for i in range(len(df)) if labels[i] == l]
+        plt.plot(x,y,'o',label = l_name)
+    plt.legend()
+    plt.savefig(f"matplotlib_plots/{save_name}")
+    plt.close()
+
 
 
 base_path = "results"
@@ -20,7 +38,8 @@ models = [
           "Octen__Octen-Embedding-8B",
           "Qwen__Qwen3-Embedding-0.6B",
           "Qwen__Qwen3-Embedding-4B",
-          #"__scratch__project_462001491__jmnybl__checkpoint-19478-tatoeba"
+          # finetuned model: later in this file
+          #"__scratch__project_462001491__jmnybl__final_embedding_model_checkpoints_tatoeba__v1-20260915-final__final-finetuned-model"
           ]
 dataset = lambda lang: f"mteb__tatoeba-bitext-mining:{lang}" 
 split = "test"
@@ -44,7 +63,7 @@ def prompts_lang(l):
             f"Given an English sentence, find its translation in {lang}.",
             f"Retrieve parellel sentences in {lang}.",
             f"Translate to {lang}.",
-            "Find a sentence that has similar meaning.",  # this is twice here because it was accidentally included twice in the calc
+            "Find a sentence that has similar meaning.",  # this is twice here because it was accidentally included twice in the calc -> removed later
             "Retrieve the corresponding translation.",
             "Given an English sentence, find its translation.",
             "Retrieve parellel sentences.",
@@ -101,13 +120,18 @@ def construct_df(model, lang, show=False, score= "recall@1",
     df_geom = pd.DataFrame.from_dict(data1).T
     df_geom = df_geom.drop_duplicates(subset="prompt_text")   # again, one calculated twice!
     for column_name, column in zip(["displacement", "sim_improvement", "angulation"],[displ, sim_inc, angul]):
-        df_geom[column_name] = [d["mean"] for d in df_geom[column]]
-        df_geom[column_name+"_normalized"] = stats.zscore(df_geom[column_name])
+        if column_name == "displacement":
+            # here we transform it from cosine similarity to cosine distance: cos_dist = 1-cos_sim
+            df_geom[column_name] = [1-d["mean"] for d in df_geom[column]]
+            df_geom[column_name+"_normalized"] = stats.zscore(df_geom[column_name])
+        else:
+            df_geom[column_name] = [d["mean"] for d in df_geom[column]]
+            df_geom[column_name+"_normalized"] = stats.zscore(df_geom[column_name])
     
 
     # merge ALL
     df = df.merge(df_geom, on='prompt_text')
-    #df = df[df.prompt_text != "NO_PROMPT"]
+    df = df[~df.prompt_text.isin(["NO_PROMPT", "EMPTY"])]
     if show: display(df.head())
     if columns_to_select:
         return df[columns_to_select]
@@ -187,10 +211,8 @@ def MW_effect_size(df, score_column, label_column):
     return (r_rb, p)
     
 
-full_results = mlm_analysis(dfs, "score ~ appropriate")
-
-print(full_results)
-
+full_results = mlm_analysis(dfs, "score ~ appropriate")  # here: no score normalized, because we control for language
+# the MV and top-k get normalized scores by default
 
 def format_number(n):
     if isinstance(n, tuple):
@@ -203,51 +225,52 @@ def to_latex_rows(results, column_names=None):
     if column_names:
         print(" & ".join([c.replace("_"," ") for c in column_names]), "\\\\")
     for model_name, r in results.items():
+        if "scratch" in model_name:
+            model_name = model_name.split("__")[-1]
         print(" & ".join([model_name.replace("__", "/")]+ [format_number(r_) for r_ in r.values()]),  "\\\\")
 
-print(score)
+print(f"--------------------Instructions only {score}------------------------")
 to_latex_rows(full_results)
-print("------------------------------------")
+print("----------------------------------------------------------------------")
 
-# add column to all dfs and analyse
+# next we use all normalized because we compare over languages
 
+score_to_analyse = "score"
+m_results = {}
+for lang in ["cmn-eng", "fin-eng", "vie-eng", "ara-eng", "tur-eng", "fra-eng", "spa-eng", "deu-eng"]:
+    for metric_to_analyse in ["displacement", "sim_improvement", "angulation"]:
+        for model_name, df in dfs.items():
+            if model_name not in m_results.keys():
+                m_results[model_name] = {}
+            df_ = df[df.language==lang]
+            sp_full, p_value_full = stats.spearmanr(df_[score_to_analyse], df_[metric_to_analyse])
+            m_results[model_name][f"spearman_{metric_to_analyse}"] = (sp_full, p_value_full)
+            # appropriate and other prompts
+            #appr_mask = df["appropriate"] == 1
+            #non_appr_mask = df["appropriate"] == 0
+            #sp_appr, p_value_appr = stats.spearmanr(df[appr_mask][score_to_analyse], df[appr_mask][metric_to_analyse])
+            #sp_nappr, p_value_nappr = stats.spearmanr(df[non_appr_mask][score_to_analyse], df[non_appr_mask][metric_to_analyse])
+            #df["interaction"] = df[metric_to_analyse] * df["appropriate"]
+            #result_ols = smf.ols(f"{score_to_analyse} ~ {metric_to_analyse} + appropriate + interaction", data=df).fit()   #
+            #print("model:", model_name)
+            #print("Spearman:", f"{np.round(sp_full, 3)}{'*' if p_value_full<0.05 else ''}")
+            #print("Spearman (appr):", f"{np.round(sp_appr, 3)}{'*' if p_value_appr<0.05 else ''}")
+            #print("Spearman (others):", f"{np.round(sp_nappr, 3)}{'*' if p_value_nappr<0.05 else ''}")
+            #print("Linear fit:")
+            #print("\tR^2:", np.round(result_ols.rsquared, 3))
+            #for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
+            #    print(f"\t{n}:{np.round(v,3)}{'*' if p<0.05 else ''}")
+            #print("")
+            
+            #m_results[model_name]["spearman_appr"] = (sp_appr, p_value_appr)
+            #m_results[model_name]["spearman_nappr"] = (sp_nappr, p_value_nappr)
+            #m_results[model_name]["r2"] = result_ols.rsquared
+            #for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
+            #    m_results[model_name][n] = (v,p)
 
-score_to_analyse = "score_normalized"
-for metric_to_analyse in ["displacement_normalized", "sim_improvement_normalized", "angulation_normalized"]:
-
-    m_results = {}
-    for model_name, df in dfs.items():
-        m_results[model_name] = {}
-        # full spearman
-        sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
-        # appropriate and other prompts
-        appr_mask = df["appropriate"] == 1
-        non_appr_mask = df["appropriate"] == 0
-        sp_appr, p_value_appr = stats.spearmanr(df[appr_mask][score_to_analyse], df[appr_mask][metric_to_analyse])
-        sp_nappr, p_value_nappr = stats.spearmanr(df[non_appr_mask][score_to_analyse], df[non_appr_mask][metric_to_analyse])
-
-        # linear fit analysis
-        df["interaction"] = df[metric_to_analyse] * df["appropriate"]
-        result_ols = smf.ols(f"{score_to_analyse} ~ {metric_to_analyse} + appropriate + interaction", data=df).fit()   #
-        #print("model:", model_name)
-        #print("Spearman:", f"{np.round(sp_full, 3)}{'*' if p_value_full<0.05 else ''}")
-        #print("Spearman (appr):", f"{np.round(sp_appr, 3)}{'*' if p_value_appr<0.05 else ''}")
-        #print("Spearman (others):", f"{np.round(sp_nappr, 3)}{'*' if p_value_nappr<0.05 else ''}")
-        #print("Linear fit:")
-        #print("\tR^2:", np.round(result_ols.rsquared, 3))
-        #for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
-        #    print(f"\t{n}:{np.round(v,3)}{'*' if p<0.05 else ''}")
-        #print("")
-        m_results[model_name]["spearman_full"] = (sp_full, p_value_full)
-        #m_results[model_name]["spearman_appr"] = (sp_appr, p_value_appr)
-        #m_results[model_name]["spearman_nappr"] = (sp_nappr, p_value_nappr)
-        m_results[model_name]["r2"] = result_ols.rsquared
-        for (n, v), (_, p) in zip(result_ols.params.items(), result_ols.pvalues.items()):
-            m_results[model_name][n] = (v,p)
-
-    print(metric_to_analyse)
+    print(f"----------------Correlations {lang} {score}---------------------")
     to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
-    print("------------------------------------------")
+    print("-----------------------------------------------------------------")
 
 
 
@@ -258,9 +281,9 @@ for model_name, df in dfs.items():
     for metric_to_analyse in ["displacement_normalized", "sim_improvement_normalized", "angulation_normalized"]:
         sp_full, p_value_full = stats.spearmanr(df[score_to_analyse], df[metric_to_analyse])
         m_results[model_name][f"spearman_{metric_to_analyse}"] = (sp_full, p_value_full)
-print(score_to_analyse)
+print(f"--------------------Correlations (all) {score}------------------------")
 to_latex_rows(m_results, column_names=["Model"]+[i for i in m_results["BAAI__bge-m3"].keys()])
-
+print("-----------------------------------------------------------------")
 
 
 d_results={}
@@ -276,7 +299,13 @@ for model_name, df in dfs.items():
     d_results[model_name]["max R@1 distr."] = max(dist)
     d_results[model_name]["max R@1 dist. (appr.)"] = max(dist_only_appr)
     # which language contains each
-    print(model_name, df[df.score_distracted == max(dist)]["language"])
+    print(model_name, "best language:", df[df.score_distracted == max(dist)]["language"].iloc[0])
     #print(model_name,"\t\t", max(reg),"\t",max(dist_only_appr))
 
+print(f"--------------------Distractors {score}------------------------")
 to_latex_rows(d_results,column_names=["Model"]+[i for i in d_results["BAAI__bge-m3"].keys()])
+print("----------------------------------------------------------------")
+
+
+
+# finetuning calculated by the 
